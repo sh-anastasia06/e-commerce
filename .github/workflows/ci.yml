@@ -8,6 +8,10 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [product-catalog-service, order-service, notification-service]
 
     steps:
       - name: Checkout repository
@@ -20,7 +24,6 @@ jobs:
           distribution: 'temurin'
           cache: 'maven' # cache dependencies for faster building
 
-      - name: Build and Test Product Catalog Service
-        run: |
-          cd product-catalog-service
-          mvn clean test
+      - name: Build and Test ${{ matrix.service }}
+        working-directory: ${{ matrix.service }}
+        run: mvn -B clean verify
