@@ -23,5 +23,4 @@ jobs:
       - name: Build and Test Product Catalog Service
         run: |
           cd product-catalog-service
-          chmod +x mvnw
-          ./mvnm clean test
+          mvn clean test
