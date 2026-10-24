@@ -1,0 +1,110 @@
+# Local development infrastructure for the e-commerce platform.
+# Start everything:   docker compose up -d
+# Stop (keep data):   docker compose down
+# Stop (wipe data):   docker compose down -v
+#
+# NOTE: passwords here are for LOCAL DEVELOPMENT ONLY. Never reuse them anywhere real.
+
+services:
+
+  # ---------- PostgreSQL: users, orders, transactions (Order & User service) ----------
+  postgres:
+    image: postgres:16
+    container_name: ecom-postgres
+    environment:
+      POSTGRES_USER: ecom
+      POSTGRES_PASSWORD: ecom_dev_password
+      POSTGRES_DB: orders
+    ports:
+      - "5432:5432"            # host:container -> connect from your IDE on localhost:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data   # named volume so data survives restarts
+    healthcheck:               # "is it actually ready?" (container running != database ready)
+      test: ["CMD-SHELL", "pg_isready -U ecom -d orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- MongoDB: product catalog (Product Catalog service) ----------
+  mongodb:
+    image: mongo:7
+    container_name: ecom-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ecom
+      MONGO_INITDB_ROOT_PASSWORD: ecom_dev_password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- Redis: catalog cache, cart (Product Catalog service) ----------
+  redis:
+    image: redis:7-alpine
+    container_name: ecom-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- Kafka in KRaft mode (no Zookeeper needed) ----------
+  # One node plays both roles: "broker" (stores/serves messages) and
+  # "controller" (manages cluster metadata). Fine for local dev, never for production.
+  #
+  # Two addresses, because Kafka tells clients where to reconnect:
+  #   localhost:9092 -> for apps running on YOUR machine (Spring Boot from the IDE, tests)
+  #   kafka:29092    -> for other containers inside the compose network
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: ecom-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # With a single node, internal topics can only have 1 replica:
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # ---------- Kafka UI: browse topics and messages (very useful while learning) ----------
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:latest
+    container_name: ecom-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8089:8080"            # open http://localhost:8089
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+  # ---------- MinIO: S3-compatible object storage for product images ----------
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: ecom-seaweedfs
+    command: server -s3 -dir=/data
+    ports:
+      - "8333:8333"   # S3 API
+      - "9333:9333"   # master web UI
+    volumes:
+      - seaweedfs-data:/data
+
+volumes:
+  postgres-data:
+  mongo-data:
+  seaweedfs-data:

@@ -1,0 +1,27 @@
+name: CI/CD pipeline
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven' # cache dependencies for faster building
+
+      - name: Build and Test Product Catalog Service
+        run: |
+          cd product-catalog-service
+          chmod +x mvnw
+          ./mvnm clean test
