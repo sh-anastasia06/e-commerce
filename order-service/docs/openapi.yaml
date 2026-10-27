@@ -1,9 +1,247 @@
 openapi: 3.1.0
 info:
-  title: Title
-  description: Title
+  title: Order Service
   version: 1.0.0
 servers:
-  - url: 'https'
+  - url: http://localhost:8082/api/v1
+    description: Local server
+
+tags:
+  - name: Orders
+    description: Order management and lifecycle
+
 paths:
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Create a new order
+      operationId: createOrder
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Unauthorized
+
+    get:
+      tags: [Orders]
+      summary: Get user's orders with pagination
+      operationId: getOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPage'
+        '401':
+          description: Unauthorized
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order by ID
+      operationId: getOrderById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "650f1f1e8b1a2c3d4e5f6789"
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          description: Unauthorized
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{id}/status:
+    patch:
+      tags: [Orders]
+      summary: Update order status
+      operationId: updateOrderStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "650f1f1e8b1a2c3d4e5f6789"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: '#/components/schemas/OrderStatus'
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Order not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    OrderStatus:
+      type: string
+      enum: [CREATED, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED]
+      example: "CREATED"
+
+    OrderItem:
+      type: object
+      required: [productId, quantity, price]
+      properties:
+        productId:
+          type: string
+          example: "650f1f1e8b1a2c3d4e5f6789"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        price:
+          type: number
+          format: double
+          minimum: 0
+          example: 799.99
+
+    OrderRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    Order:
+      type: object
+      required: [id, userId, items, status, totalPrice, createdAt]
+      properties:
+        id:
+          type: string
+          example: "650f1f1e8b1a2c3d4e5f6789"
+        userId:
+          type: string
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        totalPrice:
+          type: number
+          format: double
+          example: 1599.98
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-27T12:00:00Z"
+
+    OrderPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        totalElements:
+          type: integer
+          example: 5
+        totalPages:
+          type: integer
+          example: 1
+
+    ErrorResponse:
+      type: object
+      required: [status, code, message, timestamp]
+      properties:
+        status:
+          type: integer
+          example: 400
+        code:
+          type: string
+          example: "BAD_REQUEST"
+        message:
+          type: string
+          example: "Invalid order parameters"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-27T12:00:00Z"
   
