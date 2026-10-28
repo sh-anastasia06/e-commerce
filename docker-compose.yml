@@ -23,11 +23,11 @@ services:
       POSTGRES_PASSWORD: ecom_dev_password
       POSTGRES_DB: orders
     ports:
-      - "5432:5432"            # host:container -> connect from your IDE on localhost:5432
+      - "5433:5432"            # host:container -> connect from your IDE on localhost:5432
     volumes:
       - postgres-data:/var/lib/postgresql/data   # named volume so data survives restarts
       # Scripts in this folder run ONLY when the data volume is empty (first start).
-      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
     healthcheck:               # "is it actually ready?" (container running != database ready)
       test: ["CMD-SHELL", "pg_isready -U ecom -d orders"]
       interval: 10s
