@@ -3,11 +3,18 @@
 # Stop (keep data):   docker compose down
 # Stop (wipe data):   docker compose down -v
 #
+# This file only runs the INFRASTRUCTURE. The four Spring Boot services
+# (product-catalog, user, order, notification) run from your IDE for now and
+# connect to the ports below on localhost.
+#
 # NOTE: passwords here are for LOCAL DEVELOPMENT ONLY. Never reuse them anywhere real.
 
 services:
 
-  # ---------- PostgreSQL: users, orders, transactions (Order & User service) ----------
+  # ---------- PostgreSQL: ONE server, TWO databases ----------
+  #   orders -> order-service   (created by POSTGRES_DB below)
+  #   users  -> user-service    (created by the init script below)
+  # Each service owns its database and never reads the other's.
   postgres:
     image: postgres:16
     container_name: ecom-postgres
@@ -19,13 +26,15 @@ services:
       - "5432:5432"            # host:container -> connect from your IDE on localhost:5432
     volumes:
       - postgres-data:/var/lib/postgresql/data   # named volume so data survives restarts
+      # Scripts in this folder run ONLY when the data volume is empty (first start).
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
     healthcheck:               # "is it actually ready?" (container running != database ready)
       test: ["CMD-SHELL", "pg_isready -U ecom -d orders"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ---------- MongoDB: product catalog (Product Catalog service) ----------
+  # ---------- MongoDB: product catalog (product-catalog-service) ----------
   mongodb:
     image: mongo:7
     container_name: ecom-mongo
@@ -42,7 +51,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ---------- Redis: catalog cache, cart (Product Catalog service) ----------
+  # ---------- Redis: catalog cache (product-catalog-service) ----------
   redis:
     image: redis:7-alpine
     container_name: ecom-redis
@@ -55,12 +64,7 @@ services:
       retries: 5
 
   # ---------- Kafka in KRaft mode (no Zookeeper needed) ----------
-  # One node plays both roles: "broker" (stores/serves messages) and
-  # "controller" (manages cluster metadata). Fine for local dev, never for production.
-  #
-  # Two addresses, because Kafka tells clients where to reconnect:
-  #   localhost:9092 -> for apps running on YOUR machine (Spring Boot from the IDE, tests)
-  #   kafka:29092    -> for other containers inside the compose network
+  # Used by: order-service, notification-service, and user-service.
   kafka:
     image: apache/kafka:3.9.0
     container_name: ecom-kafka
@@ -93,14 +97,14 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
 
-  # ---------- MinIO: S3-compatible object storage for product images ----------
+  # ---------- SeaweedFS: S3-compatible object storage for product images ----------
   seaweedfs:
     image: chrislusf/seaweedfs:latest
     container_name: ecom-seaweedfs
     command: server -s3 -dir=/data
     ports:
-      - "8333:8333"   # S3 API
-      - "9333:9333"   # master web UI
+      - "8333:8333"            # S3 API (your code talks to this)
+      - "9333:9333"            # master web UI: http://localhost:9333
     volumes:
       - seaweedfs-data:/data
 
