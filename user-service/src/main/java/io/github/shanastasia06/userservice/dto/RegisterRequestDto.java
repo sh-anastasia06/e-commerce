@@ -16,6 +16,8 @@ public class RegisterRequestDto {
     private String password;
 
     // optional
+    @Size(max = 50, message = "Firstname must not exceed 50 characters")
     private String firstName;
+    @Size(max = 50, message = "Lastname must not exceed 50 characters")
     private String lastName;
 }
