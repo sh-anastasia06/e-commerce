@@ -19,7 +19,7 @@ spring:
     show-sql: true
 
   flyway:
-    enabled: false
+    enabled: true
 
 # turn on Actuator for service health check (/actuator/health)
 management:
