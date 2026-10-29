@@ -1,6 +1,8 @@
 package io.github.shanastasia06.userservice.controller;
 
+import io.github.shanastasia06.userservice.dto.LoginRequestDto;
 import io.github.shanastasia06.userservice.dto.RegisterRequestDto;
+import io.github.shanastasia06.userservice.dto.TokenResponseDto;
 import io.github.shanastasia06.userservice.dto.UserResponseDto;
 import io.github.shanastasia06.userservice.service.AuthService;
 import jakarta.validation.Valid;
@@ -19,5 +21,10 @@ public class AuthController {
     public ResponseEntity<UserResponseDto> register(@RequestBody @Valid RegisterRequestDto request) {
         UserResponseDto userResponseDto = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(userResponseDto);
+    }
+
+    @PostMapping("/login")
+    public TokenResponseDto login(@RequestBody @Valid LoginRequestDto dto) {
+        return authService.login(dto);
     }
 }

@@ -8,7 +8,10 @@ import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring")
 public interface UserMapper {
-    @Mapping(target = "passwordHash", ignore = true) // hashing in service
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "passwordHash", ignore = true)   // hashed in the service
+    @Mapping(target = "role", ignore = true)           // set by the service
+    @Mapping(target = "createdAt", ignore = true)
     User toEntity(RegisterRequestDto dto);
 
     UserResponseDto toDto(User user);

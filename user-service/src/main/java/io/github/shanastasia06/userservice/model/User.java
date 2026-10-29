@@ -32,6 +32,10 @@ public class User {
     @Column(name = "last_name", length = 50)
     private String lastName;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Role role;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -40,9 +44,13 @@ public class User {
         if (id == null) {
             id = UUID.randomUUID();
         }
+
+        if (role == null) {
+            role = Role.USER;
+        }
+
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();
         }
     }
-
 }
