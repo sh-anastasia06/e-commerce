@@ -1,0 +1,37 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/users
+    username: ecom
+    password: ecom_dev_password
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    # check if tables match jpa-entities
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+
+  flyway:
+    enabled: true
+
+# turn on Actuator for service health check (/actuator/health)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+app:
+  jwt:
+    issuer: http://localhost:8081
+    expiration-minutes: 30
