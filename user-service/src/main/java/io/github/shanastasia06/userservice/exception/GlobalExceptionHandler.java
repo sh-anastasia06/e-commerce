@@ -1,5 +1,6 @@
 package io.github.shanastasia06.userservice.exception;
 
+import org.postgresql.util.PSQLException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -90,7 +91,7 @@ public class GlobalExceptionHandler {
         // root cause
         Throwable rootCause = ex.getRootCause();
 
-        if (rootCause instanceof org.postgresql.util.PSQLException psqlException) {
+        if (rootCause instanceof PSQLException psqlException) {
             String sqlState = psqlException.getSQLState();
 
             // unique index violation
