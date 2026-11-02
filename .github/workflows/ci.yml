@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [product-catalog-service]
+        service: [product-catalog-service, user-service]
 
     steps:
       - name: Checkout repository

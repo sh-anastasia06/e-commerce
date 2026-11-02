@@ -36,11 +36,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
-          description: User with this email already exists
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Conflict'
 
   /auth/login:
     post:
@@ -60,57 +56,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /auth/refresh:
-    post:
-      tags: [Auth]
-      summary: Refresh access token
-      operationId: refreshToken
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefreshRequest'
-      responses:
-        '200':
-          description: Tokens successfully refreshed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          description: Invalid or expired refresh token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
 
   /.well-known/jwks.json:
+    servers:
+      - url: http://localhost:8081
+        description: local (this path has no /api/v1 prefix)
     get:
       tags: [JWKS]
       summary: Get JSON Web Key Set for JWT verification
       operationId: getJwks
       responses:
         '200':
-          description: JWKS retrieved successfully
+          description: Public keys used to verify tokens issued by this service
           content:
             application/json:
               schema:
-                type: object
-                required: [keys]
-                properties:
-                  keys:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: true
+                $ref: '#/components/schemas/JwkSet'
 
   /users/me:
     get:
@@ -127,11 +92,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '401':
-          description: Unauthorized
-    put:
+          $ref: '#/components/responses/Unauthorized'
+    patch:
       tags: [Users]
-      summary: Update current user profile
-      operationId: updateCurrentUser
+      summary: Update current user profile (only provided fields are changed)
+      operationId: patchCurrentUser
       security:
         - BearerAuth: []
       requestBody:
@@ -150,7 +115,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          description: Unauthorized
+          $ref: '#/components/responses/Unauthorized'
 
 components:
   securitySchemes:
@@ -162,6 +127,18 @@ components:
   responses:
     BadRequest:
       description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication failed. Invalid credentials, or a missing, invalid or expired token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Resource already exists (for example, the email is already registered)
       content:
         application/json:
           schema:
@@ -182,9 +159,11 @@ components:
           example: "StrongP@ss123"
         firstName:
           type: string
+          maxLength: 50
           example: "John"
         lastName:
           type: string
+          maxLength: 50
           example: "Doe"
 
     LoginRequest:
@@ -199,24 +178,20 @@ components:
           type: string
           example: "StrongP@ss123"
 
-    RefreshRequest:
-      type: object
-      required: [refreshToken]
-      properties:
-        refreshToken:
-          type: string
-          example: "eyJhbGciOiJIUzI1NiIsIn..."
-
     AuthResponse:
       type: object
-      required: [accessToken, refreshToken]
+      required: [accessToken, tokenType, expiresIn]
       properties:
         accessToken:
           type: string
-          example: "eyJhbGciOiJIUzI1NiIsIn..."
-        refreshToken:
+          example: "eyJraWQiOiIwNTc5MTdkOC0uLi4i..."
+        tokenType:
           type: string
-          example: "eyJhbGciOiJIUzI1NiIsIn..."
+          example: "Bearer"
+        expiresIn:
+          type: integer
+          description: Token lifetime in seconds
+          example: 1800
 
     User:
       type: object
@@ -224,7 +199,8 @@ components:
       properties:
         id:
           type: string
-          example: "650f1f1e8b1a2c3d4e5f6789"
+          format: uuid
+          example: "7b1e5c2a-9d3f-4e8a-b1c6-2f4a8d9e0c13"
         email:
           type: string
           format: email
@@ -235,20 +211,49 @@ components:
         lastName:
           type: string
           example: "Doe"
-        createdAt:
-          type: string
-          format: date-time
-          example: "2026-10-27T12:00:00Z"
 
     UserUpdateRequest:
       type: object
+      description: All fields are optional. Only the provided fields are updated.
       properties:
         firstName:
           type: string
+          maxLength: 50
           example: "John"
         lastName:
           type: string
+          maxLength: 50
           example: "Smith"
+
+    JwkSet:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/Jwk'
+
+    Jwk:
+      type: object
+      description: A public RSA key. Private key parts are never returned.
+      required: [kty, kid, e, n]
+      properties:
+        kty:
+          type: string
+          example: "RSA"
+        kid:
+          type: string
+          description: Key ID. Matches the kid in the header of issued tokens.
+          example: "057917d8-277b-4909-8668-e668ce715883"
+        e:
+          type: string
+          description: Public exponent
+          example: "AQAB"
+        n:
+          type: string
+          description: Modulus
+          example: "x8Jq..."
 
     ErrorResponse:
       type: object
@@ -267,3 +272,18 @@ components:
           type: string
           format: date-time
           example: "2026-10-27T12:00:00Z"
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: "password"
+        message:
+          type: string
+          example: "Password must have at least 8 characters"
