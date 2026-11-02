@@ -7,6 +7,7 @@ import io.github.shanastasia06.userservice.dto.UserResponseDto;
 import io.github.shanastasia06.userservice.exception.EmailAlreadyExistsException;
 import io.github.shanastasia06.userservice.exception.InvalidCredentialsException;
 import io.github.shanastasia06.userservice.mapper.UserMapper;
+import io.github.shanastasia06.userservice.model.Role;
 import io.github.shanastasia06.userservice.model.User;
 import io.github.shanastasia06.userservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,13 +29,14 @@ public class AuthService {
     public UserResponseDto register(RegisterRequestDto dto) {
         String normalizedEmail = dto.email().toLowerCase().trim();
 
-        if (!userRepository.existsByEmail(normalizedEmail)) {
+        if (userRepository.existsByEmail(normalizedEmail)) {
             throw new EmailAlreadyExistsException("Email already exists");
         }
 
         User user = userMapper.toEntity(dto);
         user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(dto.password()));
+        user.setRole(Role.USER);
 
         User savedUser = userRepository.save(user);
         return userMapper.toDto(savedUser);
