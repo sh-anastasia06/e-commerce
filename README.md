@@ -18,10 +18,11 @@
 | ------ | ---------------------- | ----------------------------------- | ---------- |
 | POST   | /auth/register         | Register a new user                 | Public     |
 | POST   | /auth/login            | Authenticate user & return JWT      | Public     |
-| POST   | /auth/refresh          | Refresh access token                | Public     |
 | GET    | /.well-known/jwks.json | Get JSON Web Key Set for validation | Public     |
 | GET    | /users/me              | Get current user profile            | Bearer JWT |
 | PUT    | /users/me              | Update current user profile         | Bearer JWT |
+
+No refresh tokens or logout. Access tokens expire after 30 minutes and the user logs in again.
 
 ### Order Service (`/api/v1`)
 
