@@ -1,5 +1,8 @@
 package io.github.shanastasia06.userservice.exception;
 
+import io.github.shanastasia06.userservice.auth.exception.EmailAlreadyExistsException;
+import io.github.shanastasia06.userservice.auth.exception.InvalidCredentialsException;
+import io.github.shanastasia06.userservice.user.exception.UserNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.util.PSQLException;
 import org.springframework.dao.DataIntegrityViolationException;
