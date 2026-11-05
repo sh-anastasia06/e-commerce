@@ -2,45 +2,161 @@ openapi: 3.1.0
 info:
   title: Product Catalog Service
   version: 1.0.0
+  description: Product and category management for the e-commerce platform.
+
 servers:
   - url: http://localhost:8080/api/v1
     description: local
+
 tags:
   - name: Products
     description: Product catalog operations
+  - name: Categories
+    description: Category operations
 
 paths:
+  /categories:
+    get:
+      tags: [Categories]
+      summary: Get all categories
+      operationId: getAllCategories
+      responses:
+        '200':
+          description: Success with the list of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+
+    post:
+      tags: [Categories]
+      summary: Create new category
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+      responses:
+        '201':
+          description: Category was successfully created
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Category slug already exists (SLUG_ALREADY_EXISTS)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /categories/{id}:
+    get:
+      tags: [Categories]
+      summary: Get category by id
+      operationId: getCategoryById
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/CategoryNotFound'
+
+    put:
+      tags: [Categories]
+      summary: Update category
+      operationId: updateCategory
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+      responses:
+        '200':
+          description: Category was successfully updated. Returns the updated category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/CategoryNotFound'
+        '409':
+          description: Category slug already exists (SLUG_ALREADY_EXISTS)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [Categories]
+      summary: Delete a category by id
+      operationId: deleteCategory
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+      responses:
+        '204':
+          description: Category was successfully deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/CategoryNotFound'
+        '409':
+          description: Category is still referenced by products (CATEGORY_IN_USE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /products:
     get:
       tags: [Products]
-      summary: Get list of product with optional filtering and pagination
+      summary: Get list of products with optional filtering and pagination
       operationId: getAllProducts
       parameters:
-        - name: category
+        - name: categoryId
           in: query
-          description: Filter products by category
+          description: Filter products by category id
           required: false
           schema:
             type: string
-            example: "Electronics"
+            format: uuid
         - name: minPrice
           in: query
-          description: Minimum price filter
+          description: Minimum price filter (decimal amount, inclusive)
           required: false
           schema:
-            type: number
-            format: double
-            minimum: 0
-            example: 10.00
+            type: string
+            pattern: '^\d+(\.\d{1,2})?$'
+            example: "10.00"
         - name: maxPrice
           in: query
-          description: Maximum price filter
+          description: Maximum price filter (decimal amount, inclusive). Must not be less than minPrice
           required: false
           schema:
-            type: number
-            format: double
-            minimum: 0
-            example: 500.00
+            type: string
+            pattern: '^\d+(\.\d{1,2})?$'
+            example: "500.00"
         - name: page
           in: query
           description: Page number (0-indexed)
@@ -60,18 +176,17 @@ paths:
             maximum: 100
       responses:
         '200':
-          description: Success with the list of products
+          description: Success with the page of products
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/ProductPage'
+                $ref: '#/components/schemas/ProductPage'
         '400':
           $ref: '#/components/responses/BadRequest'
 
     post:
       tags: [Products]
-      summary: Create new product
+      summary: Create new product (created in DRAFT status)
       operationId: createProduct
       requestBody:
         required: true
@@ -82,12 +197,23 @@ paths:
       responses:
         '201':
           description: Product was successfully created
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '409':
+          description: SKU already exists (SKU_ALREADY_EXISTS)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/CategoryReferenceNotFound'
 
   /products/{id}:
     get:
@@ -103,12 +229,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ProductNotFound'
 
     put:
       tags: [Products]
-      summary: Update product
+      summary: Update product (full replacement of editable fields)
       operationId: updateProduct
       parameters:
         - $ref: '#/components/parameters/ProductId'
@@ -120,7 +248,7 @@ paths:
               $ref: '#/components/schemas/ProductRequest'
       responses:
         '200':
-          description: Product was successfully updated. Return the updated product
+          description: Product was successfully updated. Returns the updated product
           content:
             application/json:
               schema:
@@ -128,21 +256,98 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ProductNotFound'
+        '409':
+          description: >
+            SKU already exists (SKU_ALREADY_EXISTS) or the product is ARCHIVED and cannot be modified
+            (INVALID_PRODUCT_STATE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/CategoryReferenceNotFound'
 
     delete:
       tags: [Products]
-      summary: Delete a product by id
+      summary: Delete a product by id (allowed only in DRAFT status)
       operationId: deleteProduct
       parameters:
         - $ref: '#/components/parameters/ProductId'
       responses:
         '204':
           description: Product was successfully deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ProductNotFound'
+        '409':
+          description: Product is not in DRAFT status, archive it instead (INVALID_PRODUCT_STATE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /products/{id}/activate:
+    post:
+      tags: [Products]
+      summary: Activate a product (DRAFT -> ACTIVE)
+      description: Allowed only for a DRAFT product whose price amount is greater than zero.
+      operationId: activateProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Product was activated. Returns the updated product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '409':
+          description: Product is not in DRAFT status or its price is zero (INVALID_PRODUCT_STATE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /products/{id}/archive:
+    post:
+      tags: [Products]
+      summary: Archive a product (DRAFT or ACTIVE -> ARCHIVED)
+      operationId: archiveProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Product was archived. Returns the updated product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/ProductNotFound'
+        '409':
+          description: Product is already ARCHIVED (INVALID_PRODUCT_STATE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
+  headers:
+    Location:
+      description: URL of the newly created resource
+      schema:
+        type: string
+        format: uri-reference
+        example: /api/v1/products/3fa85f64-5717-4562-b3fc-2c963f66afa6
+
   parameters:
     ProductId:
       name: id
@@ -151,70 +356,191 @@ components:
       description: Product unique id
       schema:
         type: string
-        example: "650f1f1e8b1a2c3d4e5f6789"
+        format: uuid
+        example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+    CategoryId:
+      name: id
+      in: path
+      required: true
+      description: Category unique id
+      schema:
+        type: string
+        format: uuid
+        example: "9b2c1d4e-6f7a-4b8c-9d0e-1a2b3c4d5e6f"
 
   responses:
     BadRequest:
-      description: Validation error or invalid parameters
+      description: Validation error, malformed id or invalid parameters (VALIDATION_ERROR)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-    NotFound:
-      description: Product not found
+          example:
+            status: 400
+            code: VALIDATION_ERROR
+            message: Invalid input parameters
+            timestamp: "2026-11-05T07:00:00Z"
+            details:
+              - field: price.amount
+                message: Amount must be a decimal with at most 2 fraction digits
+    ProductNotFound:
+      description: Product not found (PRODUCT_NOT_FOUND)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    CategoryNotFound:
+      description: Category not found (CATEGORY_NOT_FOUND)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    CategoryReferenceNotFound:
+      description: The categoryId in the request body does not reference an existing category (CATEGORY_NOT_FOUND)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
-    Product:
+    ProductStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, ARCHIVED]
+
+    Money:
       type: object
-      required: [ id, name, price, category ]
+      required: [amount, currency]
+      properties:
+        amount:
+          type: string
+          description: Decimal amount as a string to avoid floating point precision loss
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: "799.99"
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          pattern: '^[A-Z]{3}$'
+          example: "USD"
+
+    Attributes:
+      type: object
+      description: Free-form product attributes (for example ramGb, color)
+      maxProperties: 50
+      additionalProperties:
+        oneOf:
+          - type: string
+            maxLength: 200
+          - type: number
+          - type: boolean
+      example: { ramGb: 16, color: "silver" }
+
+    Category:
+      type: object
+      required: [id, name, slug]
       properties:
         id:
           type: string
-          example: "650f1f1e8b1a2c3d4e5f6789"
+          format: uuid
+          example: "9b2c1d4e-6f7a-4b8c-9d0e-1a2b3c4d5e6f"
+        name:
+          type: string
+          example: "Electronics"
+        slug:
+          type: string
+          example: "electronics"
+        description:
+          type: string
+          example: "Phones, laptops and accessories"
+
+    CategoryRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Electronics"
+        slug:
+          type: string
+          description: URL-friendly unique identifier, lowercase letters, digits and hyphens
+          minLength: 1
+          maxLength: 100
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+          example: "electronics"
+        description:
+          type: string
+          maxLength: 500
+          example: "Phones, laptops and accessories"
+
+    Product:
+      type: object
+      required: [id, sku, name, price, categoryId, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        sku:
+          type: string
+          example: "SAM-S24-BLK-128"
         name:
           type: string
           example: "Samsung Smartphone"
-        price:
-          type: number
-          format: double
-          example: 799.99
-        category:
+        description:
           type: string
-          example: "Electronics"
+          example: "6.2 inch display, 128 GB"
+        price:
+          $ref: '#/components/schemas/Money'
+        categoryId:
+          type: string
+          format: uuid
+          example: "9b2c1d4e-6f7a-4b8c-9d0e-1a2b3c4d5e6f"
+        status:
+          $ref: '#/components/schemas/ProductStatus'
         attributes:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/Attributes'
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-11-05T07:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-11-05T07:00:00Z"
 
     ProductRequest:
       type: object
-      required: [ name, price, category ]
+      required: [sku, name, price, categoryId]
       properties:
+        sku:
+          type: string
+          description: Unique stock keeping unit, uppercase letters, digits and hyphens
+          minLength: 3
+          maxLength: 64
+          pattern: '^[A-Z0-9]+(-[A-Z0-9]+)*$'
+          example: "LEN-T14-SLV-16"
         name:
           type: string
           minLength: 1
           maxLength: 200
           example: "Lenovo Laptop"
-        price:
-          type: number
-          format: double
-          minimum: 0
-          example: 1200.00
-        category:
+        description:
           type: string
-          minLength: 1
-          example: "Computers"
+          maxLength: 2000
+          example: "14 inch, 16 GB RAM"
+        price:
+          $ref: '#/components/schemas/Money'
+        categoryId:
+          type: string
+          format: uuid
+          example: "9b2c1d4e-6f7a-4b8c-9d0e-1a2b3c4d5e6f"
         attributes:
-          type: object
-          additionalProperties: true
-          example: { ramGb: 16, color: "silver" }
+          $ref: '#/components/schemas/Attributes'
 
     ProductPage:
       type: object
-      required: [ content, page, size, totalElements, totalPages ]
+      required: [content, page, size, totalElements, totalPages]
       properties:
         content:
           type: array
@@ -243,14 +569,23 @@ components:
           example: 404
         code:
           type: string
+          description: Stable machine-readable error code
+          enum:
+            - VALIDATION_ERROR
+            - PRODUCT_NOT_FOUND
+            - CATEGORY_NOT_FOUND
+            - SKU_ALREADY_EXISTS
+            - SLUG_ALREADY_EXISTS
+            - INVALID_PRODUCT_STATE
+            - CATEGORY_IN_USE
           example: "PRODUCT_NOT_FOUND"
         message:
           type: string
-          example: "Product with ID 12345 was not found"
+          example: "Product with ID 3fa85f64-5717-4562-b3fc-2c963f66afa6 was not found"
         timestamp:
           type: string
           format: date-time
-          example: "2026-10-24T15:56:00Z"
+          example: "2026-11-05T07:00:00Z"
         details:
           type: array
           items:
@@ -262,7 +597,7 @@ components:
       properties:
         field:
           type: string
-          example: "price"
+          example: "price.amount"
         message:
           type: string
-          example: "Price must me greater than or equal to 0"
+          example: "Amount must be a decimal with at most 2 fraction digits"
