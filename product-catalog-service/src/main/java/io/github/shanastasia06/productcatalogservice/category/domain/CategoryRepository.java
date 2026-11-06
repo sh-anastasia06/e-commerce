@@ -1,8 +1,5 @@
-package io.github.shanastasia06.productcatalogservice.category.repository;
+package io.github.shanastasia06.productcatalogservice.category.domain;
 
-import io.github.shanastasia06.productcatalogservice.category.domain.Category;
-import io.github.shanastasia06.productcatalogservice.category.domain.CategoryId;
-import io.github.shanastasia06.productcatalogservice.category.domain.Slug;
 import java.util.List;
 import java.util.Optional;
 
