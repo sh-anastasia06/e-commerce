@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: product-catalog-service
+
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017/catalog}
+    representation:
+      uuid: standard
+
+  data:
+    mongodb:
+      auto-index-creation: true
+      representation:
+        big-decimal: decimal128
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    # prints mongo queries Spring Data sends (the equivalent of show-sql)
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
