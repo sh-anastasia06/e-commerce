@@ -5,6 +5,6 @@ import io.github.shanastasia06.productcatalogservice.common.exception.DomainExce
 
 public class SlugAlreadyExistsException extends DomainException {
     public SlugAlreadyExistsException(Slug slug) {
-        super("Category with Slug \\'" + slug + "\\' already exists");
+        super("Category with Slug '" + slug + "' already exists");
     }
 }

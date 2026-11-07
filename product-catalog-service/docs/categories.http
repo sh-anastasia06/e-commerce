@@ -1,0 +1,23 @@
+### Get all categories
+GET http://localhost:8080/api/v1/categories
+Accept: application/json
+
+### Create a category
+POST http://localhost:8080/api/v1/categories
+Content-Type: application/json
+
+{
+    "name": "Electronics",
+    "slug": "electronics",
+    "description": "Electronics devices"
+}
+
+### Post with unvalid slug
+POST http://localhost:8080/api/v1/categories
+Content-Type: application/json
+
+{
+  "name": "Electronics",
+  "slug": "electronics--unvalid-slug",
+  "description": "Electronics devices"
+}
