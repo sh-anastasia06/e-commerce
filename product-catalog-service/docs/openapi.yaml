@@ -259,8 +259,9 @@ paths:
           $ref: '#/components/responses/ProductNotFound'
         '409':
           description: >
-            SKU already exists (SKU_ALREADY_EXISTS) or the product is ARCHIVED and cannot be modified
-            (INVALID_PRODUCT_STATE)
+            SKU already exists (SKU_ALREADY_EXISTS), the product is ARCHIVED and cannot be modified
+              (INVALID_PRODUCT_STATE), or the product is ACTIVE and the new price is zero
+              (INVALID_PRODUCT_STATE)
           content:
             application/json:
               schema:
