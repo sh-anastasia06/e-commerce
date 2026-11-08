@@ -80,10 +80,11 @@ public class ProductTest {
         CategoryId categoryId = new CategoryId(UUID.randomUUID());
         Instant createdAt = Instant.parse("2026-01-01T10:00:00Z");
         Instant updatedAt = Instant.parse("2026-01-05T12:00:00Z");
+        Long version = 3L;
 
         Product product = Product.restore(
                 id, sku, name, "  Restored description  ",
-                price, categoryId, ProductStatus.ACTIVE, createdAt, updatedAt
+                price, categoryId, ProductStatus.ACTIVE, createdAt, updatedAt, version
         );
 
         assertThat(product).isNotNull();
@@ -96,6 +97,7 @@ public class ProductTest {
         assertThat(product.getStatus()).isEqualTo(ProductStatus.ACTIVE);
         assertThat(product.getCreatedAt()).isEqualTo(createdAt);
         assertThat(product.getUpdatedAt()).isEqualTo(updatedAt);
+        assertThat(product.getVersion()).isEqualTo(version);
     }
 
     @Test
@@ -108,7 +110,7 @@ public class ProductTest {
 
         assertThatThrownBy(() -> Product.restore(
                 null, sku, name, "desc", price, categoryId,
-                ProductStatus.ACTIVE, now, now
+                ProductStatus.ACTIVE, now, now, 0L
         ))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("Product id must not be null");

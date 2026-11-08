@@ -24,9 +24,11 @@ public class Product {
     private ProductStatus status;
     private final Instant createdAt;
     private Instant updatedAt;
+    // is null for a product that has not been persisted yet
+    private final Long version;
 
     private Product(ProductId id, Sku sku, ProductName name, String description, Money price,
-                    CategoryId categoryId, ProductStatus status, Instant createdAt, Instant updatedAt) {
+                    CategoryId categoryId, ProductStatus status, Instant createdAt, Instant updatedAt, Long version) {
         this.id = Objects.requireNonNull(id, "Product id must not be null");
         this.sku = Objects.requireNonNull(sku, "Product sku must not be null");
         this.name = Objects.requireNonNull(name, "Product name must not be null");
@@ -36,16 +38,17 @@ public class Product {
         this.status = Objects.requireNonNull(status, "Product status must not be null");
         this.createdAt = Objects.requireNonNull(createdAt, "Product createdAt must not be null");
         this.updatedAt = Objects.requireNonNull(updatedAt, "Product updatedAt must not be null");
+        this.version = version;
     }
 
     public static Product create(Sku sku, ProductName name, String description,
                                  Money price, CategoryId categoryId, Instant now ) {
-        return new Product(ProductId.generate(), sku, name, normalizeDescription(description), price, categoryId, ProductStatus.DRAFT, now, now);
+        return new Product(ProductId.generate(), sku, name, normalizeDescription(description), price, categoryId, ProductStatus.DRAFT, now, now, null);
     }
 
     public static Product restore(ProductId id, Sku sku, ProductName name, String description,
-                                  Money price, CategoryId categoryId, ProductStatus status, Instant createdAt, Instant updatedAt) {
-        return new Product(id, sku, name, normalizeDescription(description), price, categoryId, status, createdAt, updatedAt);
+                                  Money price, CategoryId categoryId, ProductStatus status, Instant createdAt, Instant updatedAt, Long version) {
+        return new Product(id, sku, name, normalizeDescription(description), price, categoryId, status, createdAt, updatedAt, version);
     }
 
     public void activate(Instant now) {

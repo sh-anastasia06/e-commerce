@@ -28,4 +28,8 @@ public record Money(BigDecimal amount, Currency currency) {
     public boolean isPositive() {
         return amount.signum() > 0;
     }
+
+    public boolean isGreaterThan(Money money) {
+        return amount.compareTo(money.amount()) > 0;
+    }
 }
