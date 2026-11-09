@@ -244,7 +244,7 @@ public class ProductTest {
                 "ramGb", 16,
                 "color", "silver",
                 "waterproof", true,
-                "weight", new BigDecimal("1.25"))
+                "weight", 1.25)
         );
         Product product = Product.create(
                 sku,
