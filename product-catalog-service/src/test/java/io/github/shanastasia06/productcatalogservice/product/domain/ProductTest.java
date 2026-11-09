@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Currency;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.AssertionsForClassTypes.*;
@@ -21,7 +22,7 @@ public class ProductTest {
 
     @Test
     void create_withNormalizedDescription_succeeds() {
-        Product product = Product.create(sku, name, "  Valid description with spaces  ", price, categoryId, now);
+        Product product = Product.create(sku, name, "  Valid description with spaces  ", price, categoryId, Attributes.empty(), now);
 
         assertThat(product).isNotNull();
         assertThat(product.getId()).isNotNull();
@@ -30,6 +31,7 @@ public class ProductTest {
         assertThat(product.getDescription()).isEqualTo("Valid description with spaces");
         assertThat(product.getPrice()).isEqualTo(price);
         assertThat(product.getCategoryId()).isEqualTo(categoryId);
+        assertThat(product.getAttributes()).isEqualTo(Attributes.empty());
         assertThat(product.getStatus()).isEqualTo(ProductStatus.DRAFT);
         assertThat(product.getCreatedAt()).isEqualTo(now);
         assertThat(product.getUpdatedAt()).isEqualTo(now);
@@ -37,8 +39,8 @@ public class ProductTest {
 
     @Test
     void create_withNullOrBlankDescription_succeeds() {
-        Product productNull = Product.create(sku, name, null, price, categoryId, now);
-        Product productBlank = Product.create(sku, name, "     ", price, categoryId, now);
+        Product productNull = Product.create(sku, name, null, price, categoryId, Attributes.empty(), now);
+        Product productBlank = Product.create(sku, name, "     ", price, categoryId, Attributes.empty(), now);
 
         assertThat(productNull.getDescription()).isNull();
         assertThat(productBlank.getDescription()).isNull();
@@ -48,22 +50,22 @@ public class ProductTest {
     void create_withDescriptionExceedsMaxLength_throws() {
         String tooLongDescription = "A".repeat(Product.DESCRIPTION_MAX_LENGTH + 1);
 
-        assertThatThrownBy(() -> Product.create(sku, name, tooLongDescription, price, categoryId, now))
+        assertThatThrownBy(() -> Product.create(sku, name, tooLongDescription, price, categoryId, Attributes.empty(), now))
                 .isInstanceOf(DomainValidationException.class)
                 .hasMessageContaining("Product description must not be longer than 2000 characters");
     }
 
     @Test
     void create_withRequiredFieldIsNull_throws() {
-        assertThatThrownBy(() -> Product.create(null, name, "Desc", price, categoryId, now))
+        assertThatThrownBy(() -> Product.create(null, name, "Desc", price, categoryId, Attributes.empty(), now))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("Product sku must not be null");
     }
 
     @Test
     void shouldEvaluateEqualsAndHashCodeOnlyById() {
-        Product product1 = Product.create(sku, name, "Desc 1", price, categoryId, now);
-        Product product2 = Product.create(sku, name, "Desc 2", price, categoryId, now);
+        Product product1 = Product.create(sku, name, "Desc 1", price, categoryId, Attributes.empty(), now);
+        Product product2 = Product.create(sku, name, "Desc 2", price, categoryId, Attributes.empty(), now);
 
         assertThat(product1).isEqualTo(product1);
         assertThat(product1.hashCode()).isEqualTo(product1.hashCode());
@@ -84,7 +86,7 @@ public class ProductTest {
 
         Product product = Product.restore(
                 id, sku, name, "  Restored description  ",
-                price, categoryId, ProductStatus.ACTIVE, createdAt, updatedAt, version
+                price, categoryId, Attributes.empty(), ProductStatus.ACTIVE, createdAt, updatedAt, version
         );
 
         assertThat(product).isNotNull();
@@ -94,6 +96,7 @@ public class ProductTest {
         assertThat(product.getDescription()).isEqualTo("Restored description");
         assertThat(product.getPrice()).isEqualTo(price);
         assertThat(product.getCategoryId()).isEqualTo(categoryId);
+        assertThat(product.getAttributes()).isEqualTo(Attributes.empty());
         assertThat(product.getStatus()).isEqualTo(ProductStatus.ACTIVE);
         assertThat(product.getCreatedAt()).isEqualTo(createdAt);
         assertThat(product.getUpdatedAt()).isEqualTo(updatedAt);
@@ -109,7 +112,7 @@ public class ProductTest {
         Instant now = Instant.now();
 
         assertThatThrownBy(() -> Product.restore(
-                null, sku, name, "desc", price, categoryId,
+                null, sku, name, "desc", price, categoryId, Attributes.empty(),
                 ProductStatus.ACTIVE, now, now, 0L
         ))
                 .isInstanceOf(NullPointerException.class)
@@ -118,7 +121,7 @@ public class ProductTest {
 
     @Test
     void activate_withValidInstant_changesStatusToActive() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         Instant activationTime = now.plusSeconds(3600);
 
         product.activate(activationTime);
@@ -129,7 +132,7 @@ public class ProductTest {
 
     @Test
     void activate_withNullInstant_throwsNullPointerException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
 
         assertThatThrownBy(() -> product.activate(null))
                 .isInstanceOf(NullPointerException.class)
@@ -138,7 +141,7 @@ public class ProductTest {
 
     @Test
     void activate_withActiveStatus_throwsInvalidProductStateException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         product.activate(now);
 
         assertThatThrownBy(() -> product.activate(now))
@@ -149,7 +152,7 @@ public class ProductTest {
     @Test
     void activate_withZeroPrice_throwsInvalidProductStateException() {
         Money zeroPrice = new Money(BigDecimal.ZERO, Currency.getInstance("USD"));
-        Product product = Product.create(sku, name, "Desc", zeroPrice, categoryId, now);
+        Product product = Product.create(sku, name, "Desc", zeroPrice, categoryId, Attributes.empty(), now);
 
         assertThatThrownBy(() -> product.activate(now))
                 .isInstanceOf(InvalidProductStateException.class)
@@ -158,7 +161,7 @@ public class ProductTest {
 
     @Test
     void archive_withValidInstant_changesStatusToArchived() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         Instant archiveTime = now.plusSeconds(3600);
 
         product.archive(archiveTime);
@@ -169,7 +172,7 @@ public class ProductTest {
 
     @Test
     void archive_withNullInstant_throwsNullPointerException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
 
         assertThatThrownBy(() -> product.archive(null))
                 .isInstanceOf(NullPointerException.class)
@@ -178,8 +181,8 @@ public class ProductTest {
 
     @Test
     void archive_withArchivedStatus_throwsInvalidProductStateException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
-        product.archive(now); // перевод в ARCHIVED
+        Product product = ProductFixtures.draftProduct();
+        product.archive(now);
 
         assertThatThrownBy(() -> product.archive(now.plusSeconds(10)))
                 .isInstanceOf(InvalidProductStateException.class)
@@ -188,15 +191,14 @@ public class ProductTest {
 
     @Test
     void ensureCanBeDeleted_withDraftStatus_doesNothing() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
 
-        // Товар в статусе DRAFT может быть удален, исключение не выбрасывается
         assertThatCode(product::ensureCanBeDeleted).doesNotThrowAnyException();
     }
 
     @Test
     void ensureCanBeDeleted_withActiveStatus_throwsInvalidProductStateException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         product.activate(now);
 
         assertThatThrownBy(product::ensureCanBeDeleted)
@@ -206,7 +208,7 @@ public class ProductTest {
 
     @Test
     void ensureCanBeDeleted_withArchivedStatus_throwsInvalidProductStateException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         product.archive(now);
 
         assertThatThrownBy(product::ensureCanBeDeleted)
@@ -216,17 +218,14 @@ public class ProductTest {
 
     @Test
     void lifecycle_fullWorkflow_executesSuccessfullyAndRestrictsInvalidTransitions() {
-        // create (DRAFT status)
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         assertThat(product.getStatus()).isEqualTo(ProductStatus.DRAFT);
 
-        // DRAFT -> ACTIVE
         Instant activateTime = now.plusSeconds(10);
         product.activate(activateTime);
         assertThat(product.getStatus()).isEqualTo(ProductStatus.ACTIVE);
         assertThat(product.getUpdatedAt()).isEqualTo(activateTime);
 
-        // ACTIVE -> ARCHIVED
         Instant archiveTime = now.plusSeconds(20);
         product.archive(archiveTime);
         assertThat(product.getStatus()).isEqualTo(ProductStatus.ARCHIVED);
@@ -240,8 +239,34 @@ public class ProductTest {
     }
 
     @Test
+    void create_withAttributes_executesSuccessfully() {
+        Attributes attributes = new Attributes(Map.of(
+                "ramGb", 16,
+                "color", "silver",
+                "waterproof", true,
+                "weight", new BigDecimal("1.25"))
+        );
+        Product product = Product.create(
+                sku,
+                name,
+                "Description",
+                price,
+                categoryId,
+                attributes,
+                now
+        );
+        assertThat(product).isNotNull();
+        assertThat(product.getSku()).isEqualTo(sku);
+        assertThat(product.getName()).isEqualTo(name);
+        assertThat(product.getPrice()).isEqualTo(price);
+        assertThat(product.getCategoryId()).isEqualTo(categoryId);
+        assertThat(product.getAttributes()).isEqualTo(attributes);
+        assertThat(product.getStatus()).isEqualTo(ProductStatus.DRAFT);
+    }
+
+    @Test
     void update_validParametersInDraftStatus_updatesAllFields() {
-        Product product = Product.create(sku, name, "Old Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
 
         Sku newSku = new Sku("NEW-SKU-123");
         ProductName newName = new ProductName("New Name");
@@ -249,43 +274,44 @@ public class ProductTest {
         CategoryId newCategoryId = new CategoryId(UUID.randomUUID());
         Instant updateTime = now.plusSeconds(60);
 
-        product.update(newSku, newName, "  New Desc  ", newPrice, newCategoryId, updateTime);
+        product.update(newSku, newName, "  New Desc  ", newPrice, newCategoryId, Attributes.empty(), updateTime);
 
         assertThat(product.getSku()).isEqualTo(newSku);
         assertThat(product.getName()).isEqualTo(newName);
         assertThat(product.getDescription()).isEqualTo("New Desc");
         assertThat(product.getPrice()).isEqualTo(newPrice);
         assertThat(product.getCategoryId()).isEqualTo(newCategoryId);
+        assertThat(product.getAttributes()).isEqualTo(Attributes.empty());
         assertThat(product.getUpdatedAt()).isEqualTo(updateTime);
     }
 
     @Test
     void update_withArchivedStatus_throwsInvalidProductStateException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         product.archive(now);
 
-        assertThatThrownBy(() -> product.update(sku, name, "Desc", price, categoryId, now.plusSeconds(10)))
+        assertThatThrownBy(() -> product.update(sku, name, "Desc", price, categoryId, Attributes.empty(), now.plusSeconds(10)))
                 .isInstanceOf(InvalidProductStateException.class)
                 .hasMessageContaining("is archived and cannot be modified");
     }
 
     @Test
     void update_withActiveStatusWithZeroPrice_throwsInvalidProductStateException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
         product.activate(now);
 
         Money zeroPrice = new Money(BigDecimal.ZERO, Currency.getInstance("USD"));
 
-        assertThatThrownBy(() -> product.update(sku, name, "Desc", zeroPrice, categoryId, now.plusSeconds(10)))
+        assertThatThrownBy(() -> product.update(sku, name, "Desc", zeroPrice, categoryId, Attributes.empty(), now.plusSeconds(10)))
                 .isInstanceOf(InvalidProductStateException.class)
                 .hasMessageContaining("is active and must have a price greater than zero");
     }
 
     @Test
     void update_withNullSku_throwsNullPointerException() {
-        Product product = Product.create(sku, name, "Desc", price, categoryId, now);
+        Product product = ProductFixtures.draftProduct();
 
-        assertThatThrownBy(() -> product.update(null, name, "Desc", price, categoryId, now))
+        assertThatThrownBy(() -> product.update(null, name, "Desc", price, categoryId, Attributes.empty(), now))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("Product sku must not be null");
     }

@@ -6,6 +6,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import java.util.Currency;
+import java.util.Map;
 import java.util.UUID;
 
 @Mapper(componentModel = "spring")
@@ -23,6 +24,7 @@ public interface ProductMapper {
                 document.getDescription(),
                 new Money(document.getPriceAmount(), Currency.getInstance(document.getPriceCurrency())),
                 new CategoryId(document.getCategoryId()),
+                new Attributes(document.getAttributes()),
                 ProductStatus.valueOf(document.getStatus()),
                 document.getCreatedAt(),
                 document.getUpdatedAt(),
@@ -44,5 +46,9 @@ public interface ProductMapper {
 
     default String nameToString(ProductName name) {
         return name.value();
+    }
+
+    default Map<String, Object> attributesToMap(Attributes attributes) {
+        return attributes.values();
     }
 }

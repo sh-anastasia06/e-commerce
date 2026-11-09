@@ -21,6 +21,7 @@ public class Product {
     private String description;
     private Money price;
     private CategoryId categoryId;
+    private Attributes attributes;
     private ProductStatus status;
     private final Instant createdAt;
     private Instant updatedAt;
@@ -28,7 +29,7 @@ public class Product {
     private final Long version;
 
     private Product(ProductId id, Sku sku, ProductName name, String description, Money price,
-                    CategoryId categoryId, ProductStatus status, Instant createdAt, Instant updatedAt, Long version) {
+                    CategoryId categoryId, Attributes attributes, ProductStatus status, Instant createdAt, Instant updatedAt, Long version) {
         this.id = Objects.requireNonNull(id, "Product id must not be null");
         this.sku = Objects.requireNonNull(sku, "Product sku must not be null");
         this.name = Objects.requireNonNull(name, "Product name must not be null");
@@ -39,16 +40,17 @@ public class Product {
         this.createdAt = Objects.requireNonNull(createdAt, "Product createdAt must not be null");
         this.updatedAt = Objects.requireNonNull(updatedAt, "Product updatedAt must not be null");
         this.version = version;
+        this.attributes = Objects.requireNonNull(attributes, "Product attributes must not be null");
     }
 
     public static Product create(Sku sku, ProductName name, String description,
-                                 Money price, CategoryId categoryId, Instant now ) {
-        return new Product(ProductId.generate(), sku, name, normalizeDescription(description), price, categoryId, ProductStatus.DRAFT, now, now, null);
+                                 Money price, CategoryId categoryId, Attributes attributes, Instant now) {
+        return new Product(ProductId.generate(), sku, name, normalizeDescription(description), price, categoryId, attributes, ProductStatus.DRAFT, now, now, null);
     }
 
     public static Product restore(ProductId id, Sku sku, ProductName name, String description,
-                                  Money price, CategoryId categoryId, ProductStatus status, Instant createdAt, Instant updatedAt, Long version) {
-        return new Product(id, sku, name, normalizeDescription(description), price, categoryId, status, createdAt, updatedAt, version);
+                                  Money price, CategoryId categoryId, Attributes attributes, ProductStatus status, Instant createdAt, Instant updatedAt, Long version) {
+        return new Product(id, sku, name, normalizeDescription(description), price, categoryId, attributes, status, createdAt, updatedAt, version);
     }
 
     public void activate(Instant now) {
@@ -73,11 +75,12 @@ public class Product {
     }
 
     public void update(Sku sku, ProductName name, String description,
-                       Money price, CategoryId categoryId, Instant now) {
+                       Money price, CategoryId categoryId, Attributes attributes, Instant now) {
         Objects.requireNonNull(sku, "Product sku must not be null");
         Objects.requireNonNull(name, "Product name must not be null");
         Objects.requireNonNull(price, "Product price must not be null");
         Objects.requireNonNull(categoryId, "Product category id must not be null");
+        Objects.requireNonNull(attributes, "Product attributes must not be null");
         Objects.requireNonNull(now, "now must not be null");
         String normalizedDescription = normalizeDescription(description);
 
@@ -93,6 +96,7 @@ public class Product {
         this.description = normalizedDescription;
         this.price = price;
         this.categoryId = categoryId;
+        this.attributes = attributes;
         this.updatedAt = now;
     }
 

@@ -11,6 +11,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 @Document(collection = "products")
@@ -33,6 +34,7 @@ public class ProductDocument {
     @Indexed
     private UUID categoryId;
 
+    private Map<String, Object> attributes;
     private String status;
     private Instant createdAt;
     private Instant updatedAt;

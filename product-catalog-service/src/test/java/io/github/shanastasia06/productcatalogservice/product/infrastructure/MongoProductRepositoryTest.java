@@ -37,7 +37,7 @@ class MongoProductRepositoryTest {
         mongoTemplate.remove(new Query(), ProductDocument.class);
     }
 
-    private Product createProduct(String sku, String name, BigDecimal price, UUID categoryId, Instant createdAt) {
+    private Product createProduct(String sku, String name, BigDecimal price, UUID categoryId, Attributes attributes, Instant createdAt) {
         return Product.restore(
                 ProductId.generate(),
                 new Sku(sku),
@@ -45,6 +45,7 @@ class MongoProductRepositoryTest {
                 "Description",
                 new Money(price, USD),
                 new CategoryId(categoryId),
+                attributes,
                 ProductStatus.ACTIVE,
                 createdAt,
                 createdAt,
@@ -60,6 +61,7 @@ class MongoProductRepositoryTest {
                 "Description",
                 new Money(BigDecimal.valueOf(100), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 Instant.now()
         );
 
@@ -78,6 +80,7 @@ class MongoProductRepositoryTest {
                 "Description",
                 new Money(BigDecimal.valueOf(100), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 Instant.now()
         );
         Product saved = productRepository.save(product);
@@ -88,6 +91,7 @@ class MongoProductRepositoryTest {
                 saved.getDescription(),
                 saved.getPrice(),
                 saved.getCategoryId(),
+                Attributes.empty(),
                 Instant.now()
         );
         Product updated = productRepository.save(saved);
@@ -104,6 +108,7 @@ class MongoProductRepositoryTest {
                 null,
                 new Money(BigDecimal.valueOf(100), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 now
         ));
         Product duplicate = Product.create(
@@ -112,6 +117,7 @@ class MongoProductRepositoryTest {
                 null,
                 new Money(BigDecimal.valueOf(200), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 now
         );
 
@@ -128,18 +134,52 @@ class MongoProductRepositoryTest {
                 null,
                 new Money(BigDecimal.valueOf(100), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 now
         ));
 
         Product a = productRepository.findById(saved.getId()).get();
         Product b = productRepository.findById(saved.getId()).get();
 
-        a.update(a.getSku(), new ProductName("Name A"), a.getDescription(), a.getPrice(), a.getCategoryId(), Instant.now());
+        a.update(a.getSku(), new ProductName("Name A"), a.getDescription(), a.getPrice(), a.getCategoryId(), a.getAttributes(), Instant.now());
         productRepository.save(a); // works
 
-        b.update(b.getSku(), new ProductName("Name B"), b.getDescription(), b.getPrice(), b.getCategoryId(), Instant.now());
+        b.update(b.getSku(), new ProductName("Name B"), b.getDescription(), b.getPrice(), b.getCategoryId(), b.getAttributes(), Instant.now());
         assertThatThrownBy(() -> productRepository.save(b))
                 .isInstanceOf(ConcurrentUpdateException.class);
+    }
+
+    @Test
+    void save_withAttributes_keepsAttributesTypes() {
+        Attributes attributes = new Attributes(Map.of(
+                "ramGb", 16,
+                "color", "silver",
+                "waterproof", true,
+                "weight", 1.25,
+                "views", 3_000_000L
+        ));
+
+        Product product = Product.create(
+                new Sku("SKU-ATTR"),
+                new ProductName("Laptop Pro"),
+                "High-end laptop",
+                new Money(BigDecimal.valueOf(1200), USD),
+                CategoryId.generate(),
+                attributes,
+                Instant.now()
+        );
+
+        Product saved = productRepository.save(product);
+        Optional<Product> found = productRepository.findById(saved.getId());
+
+        assertThat(found).isPresent();
+        Map<String, Object> values = found.get().getAttributes().values();
+
+        assertThat(values.get("ramGb")).isEqualTo(16).isInstanceOf(Integer.class);
+        assertThat(values.get("color")).isEqualTo("silver").isInstanceOf(String.class);
+        assertThat(values.get("waterproof")).isEqualTo(true).isInstanceOf(Boolean.class);
+        assertThat(values.get("weight")).isEqualTo(1.25).isInstanceOf(Double.class);
+        assertThat(values.get("views")).isInstanceOf(Long.class);
     }
 
     @Test
@@ -150,6 +190,7 @@ class MongoProductRepositoryTest {
                 null,
                 new Money(BigDecimal.valueOf(100), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 Instant.now()
         ));
 
@@ -166,6 +207,7 @@ class MongoProductRepositoryTest {
                 null,
                 new Money(BigDecimal.valueOf(100), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 now
         ));
 
@@ -177,6 +219,7 @@ class MongoProductRepositoryTest {
                 null,
                 new Money(BigDecimal.valueOf(200), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 now
         ));
         assertThat(productRepository.existsBySkuAndIdNot(new Sku("SKU-2"), saved.getId())).isTrue();
@@ -190,6 +233,7 @@ class MongoProductRepositoryTest {
                 null,
                 new Money(BigDecimal.valueOf(100), USD),
                 new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
                 Instant.now()
         ));
 
@@ -201,8 +245,8 @@ class MongoProductRepositoryTest {
     @Test
     void search_withNoFilters_returnsAllProductsNewestFirst() {
         Instant now = Instant.now();
-        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), now));
-        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(20), UUID.randomUUID(), now.plusSeconds(1)));
+        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), Attributes.empty(), now));
+        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(20), UUID.randomUUID(), Attributes.empty(), now.plusSeconds(1)));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(null, null, null),
@@ -215,8 +259,8 @@ class MongoProductRepositoryTest {
     @Test
     void search_withSameCreatedAt_respectsIdTiebreak() {
         Instant now = Instant.now();
-        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), now));
-        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(20), UUID.randomUUID(), now));
+        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), Attributes.empty(), now));
+        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(20), UUID.randomUUID(), Attributes.empty(), now));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(null, null, null),
@@ -235,8 +279,8 @@ class MongoProductRepositoryTest {
     @Test
     void search_withCategoryFilter_returnsOnlyThatCategoryProducts() {
         Instant now = Instant.now();
-        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), now));
-        productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(20), UUID.randomUUID(), now.plusSeconds(1)));
+        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), Attributes.empty(), now));
+        productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(20), UUID.randomUUID(), Attributes.empty(), now.plusSeconds(1)));
 
         CategoryId categoryId = p1.getCategoryId();
 
@@ -251,7 +295,7 @@ class MongoProductRepositoryTest {
     @Test
     void search_withMinPriceBoundary_isInclusive() {
         Instant now = Instant.now();
-        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(50), UUID.randomUUID(), now));
+        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(50), UUID.randomUUID(), Attributes.empty(), now));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(null, new Money(BigDecimal.valueOf(50), USD), null),
@@ -264,7 +308,7 @@ class MongoProductRepositoryTest {
     @Test
     void search_withMaxPriceBoundary_isInclusive() {
         Instant now = Instant.now();
-        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(50), UUID.randomUUID(), now));
+        Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(50), UUID.randomUUID(), Attributes.empty(), now));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(null, null, new Money(BigDecimal.valueOf(50), USD)),
@@ -277,9 +321,9 @@ class MongoProductRepositoryTest {
     @Test
     void search_withPriceRange_returnsProductsWithinBounds() {
         Instant now = Instant.now();
-        productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(50), UUID.randomUUID(), now));
-        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(100), UUID.randomUUID(), now.plusSeconds(1)));
-        productRepository.save(createProduct("SKU-3", "Product 3", BigDecimal.valueOf(150), UUID.randomUUID(), now.plusSeconds(2)));
+        productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(50), UUID.randomUUID(), Attributes.empty(),now));
+        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(100), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(1)));
+        productRepository.save(createProduct("SKU-3", "Product 3", BigDecimal.valueOf(150), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(2)));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(null, new Money(BigDecimal.valueOf(80), USD), new Money(BigDecimal.valueOf(120), USD)),
@@ -292,8 +336,8 @@ class MongoProductRepositoryTest {
     @Test
     void search_withNumericPriceComparison_filtersCorrectlyNumericallyNotLexicographically() {
         Instant now = Instant.now();
-        productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(20.00), UUID.randomUUID(), now));
-        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(100.00), UUID.randomUUID(), now.plusSeconds(1)));
+        productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(20.00), UUID.randomUUID(), Attributes.empty(),now));
+        Product p2 = productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(100.00), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(1)));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(null, new Money(BigDecimal.valueOf(50.00), USD), null),
@@ -307,9 +351,9 @@ class MongoProductRepositoryTest {
     void search_withAllThreeFiltersCombined_returnsMatchingProduct() {
         Instant now = Instant.now();
         CategoryId categoryId = new CategoryId(UUID.randomUUID());
-        Product target = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(100), categoryId.value(), now));
-        productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(100), UUID.randomUUID(), now.plusSeconds(1)));
-        productRepository.save(createProduct("SKU-3", "Product 3", BigDecimal.valueOf(200), UUID.randomUUID(), now.plusSeconds(2)));
+        Product target = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(100), categoryId.value(), Attributes.empty(),now));
+        productRepository.save(createProduct("SKU-2", "Product 2", BigDecimal.valueOf(100), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(1)));
+        productRepository.save(createProduct("SKU-3", "Product 3", BigDecimal.valueOf(200), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(2)));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(categoryId, new Money(BigDecimal.valueOf(90), USD), new Money(BigDecimal.valueOf(110), USD)),
@@ -322,7 +366,7 @@ class MongoProductRepositoryTest {
     @Test
     void search_withNoMatches_returnsEmptyListAndZeroTotals() {
         Instant now = Instant.now();
-        productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), now));
+        productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), Attributes.empty(),now));
 
         PageResult<Product> result = productRepository.search(
                 new ProductSearchCriteria(new CategoryId(UUID.randomUUID()), null, null),
@@ -338,7 +382,7 @@ class MongoProductRepositoryTest {
     void search_withPaging_returnsCorrectPagesAndMetadata() {
         Instant now = Instant.now();
         for (int i = 0; i < 25; i++) {
-            productRepository.save(createProduct("SKU-" + i, "Product " + i, BigDecimal.valueOf(10 + i), UUID.randomUUID(), now.plusSeconds(i)));
+            productRepository.save(createProduct("SKU-" + i, "Product " + i, BigDecimal.valueOf(10 + i), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(i)));
         }
 
         PageResult<Product> page0 = productRepository.search(new ProductSearchCriteria(null, null, null), new PageQuery(0, 10));
@@ -356,7 +400,7 @@ class MongoProductRepositoryTest {
     void search_beyondLastPage_returnsEmptyContentWithCorrectTotalElements() {
         Instant now = Instant.now();
         for (int i = 0; i < 25; i++) {
-            productRepository.save(createProduct("SKU-" + i, "Product " + i, BigDecimal.valueOf(10 + i), UUID.randomUUID(), now.plusSeconds(i)));
+            productRepository.save(createProduct("SKU-" + i, "Product " + i, BigDecimal.valueOf(10 + i), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(i)));
         }
 
         PageResult<Product> page5 = productRepository.search(new ProductSearchCriteria(null, null, null), new PageQuery(5, 10));
@@ -369,7 +413,7 @@ class MongoProductRepositoryTest {
     void search_acrossMultiplePages_containsNoDuplicateOrOverlappingIds() {
         Instant now = Instant.now();
         for (int i = 0; i < 25; i++) {
-            productRepository.save(createProduct("SKU-" + i, "Product " + i, BigDecimal.valueOf(10 + i), UUID.randomUUID(), now.plusSeconds(i)));
+            productRepository.save(createProduct("SKU-" + i, "Product " + i, BigDecimal.valueOf(10 + i), UUID.randomUUID(), Attributes.empty(),now.plusSeconds(i)));
         }
 
         List<Product> page0 = productRepository.search(new ProductSearchCriteria(null, null, null), new PageQuery(0, 10)).content();
