@@ -1,6 +1,9 @@
 server:
   port: 8080
 
+catalog:
+  currency: USD
+
 spring:
   application:
     name: product-catalog-service
