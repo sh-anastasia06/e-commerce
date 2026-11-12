@@ -243,6 +243,61 @@ class MongoProductRepositoryTest {
     }
 
     @Test
+    void delete_withSavedProduct_succeeds() {
+        Product saved = productRepository.save(Product.create(
+                new Sku("SKU-1"),
+                new ProductName("Product 1"),
+                null,
+                new Money(BigDecimal.valueOf(100), USD),
+                new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
+                Instant.now()
+        ));
+
+        Optional<Product> loaded =  productRepository.findById(saved.getId());
+        assertThat(loaded).isPresent();
+
+        productRepository.delete(loaded.get());
+        assertThat(productRepository.findById(saved.getId())).isEmpty();
+    }
+
+    @Test
+    void delete_withModifiedProduct_throwsConcurrentUpdateException() {
+        Product saved = productRepository.save(Product.create(
+                new Sku("SKU-1"),
+                new ProductName("Product 1"),
+                null,
+                new Money(BigDecimal.valueOf(100), USD),
+                new CategoryId(UUID.randomUUID()),
+                Attributes.empty(),
+                Instant.now()
+        ));
+
+        Optional<Product> loaded1 =  productRepository.findById(saved.getId());
+        Optional<Product> loaded2 =  productRepository.findById(saved.getId());
+        assertThat(loaded1).isPresent();
+        assertThat(loaded2).isPresent();
+
+        Product productToModify = loaded1.get();
+        productToModify.update(
+                productToModify.getSku(),
+                new ProductName("New name"),
+                productToModify.getDescription(),
+                productToModify.getPrice(),
+                productToModify.getCategoryId(),
+                productToModify.getAttributes(),
+                Instant.now()
+        );
+
+        productRepository.save(productToModify);
+
+        assertThatThrownBy(() -> productRepository.delete(loaded2.get()))
+                .isInstanceOf(ConcurrentUpdateException.class);
+
+        assertThat(productRepository.findById(saved.getId())).isPresent();
+    }
+
+    @Test
     void search_withNoFilters_returnsAllProductsNewestFirst() {
         Instant now = Instant.now();
         Product p1 = productRepository.save(createProduct("SKU-1", "Product 1", BigDecimal.valueOf(10), UUID.randomUUID(), Attributes.empty(), now));

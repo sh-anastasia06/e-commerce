@@ -61,6 +61,16 @@ class MongoProductRepository implements ProductRepository {
         springDataRepository.deleteById(id.value());
     }
 
+    // optimistic lock on delete
+    @Override
+    public void delete(Product product) {
+        try {
+            springDataRepository.delete(mapper.toDocument(product));
+        } catch (OptimisticLockingFailureException e) {
+            throw new ConcurrentUpdateException(product.getId());
+        }
+    }
+
     @Override
     public PageResult<Product> search(ProductSearchCriteria criteria, PageQuery pageQuery) {
         Query filter = buildFilter(criteria);

@@ -32,7 +32,7 @@ public class ProductService {
         this.allowedCurrency = allowedCurrency;
     }
 
-    public Product create(CreateProductCommand command) {
+    public Product create(ProductCommand command) {
         Sku sku = new Sku(command.sku());
         ProductName name = new ProductName(command.name());
         Money price = toMoney(command.priceAmount(), command.priceCurrency());
@@ -69,6 +69,46 @@ public class ProductService {
         return productRepository.search(criteria, pageQuery);
     }
 
+    public Product update(UUID id, ProductCommand command) {
+        Sku sku = new Sku(command.sku());
+        ProductName name = new ProductName(command.name());
+        Money price = toMoney(command.priceAmount(), command.priceCurrency());
+        CategoryId categoryId = new CategoryId(command.categoryId());
+        Attributes attributes = new Attributes(command.attributes());
+        String description = command.description().strip();
+
+        Product product = findOrThrow(new ProductId(id));
+        product.ensureCanBeEdited();
+
+        if (!categoryExistenceChecker.exists(categoryId)) {
+            throw new CategoryReferenceNotFoundException(categoryId);
+        }
+        if (productRepository.existsBySkuAndIdNot(sku, product.getId())) {
+            throw new SkuAlreadyExistsException(sku);
+        }
+
+        product.update(sku, name, description, price, categoryId, attributes, Instant.now(clock));
+        return productRepository.save(product);
+    }
+
+    public Product activate(UUID id) {
+        Product product = findOrThrow(new ProductId(id));
+        product.activate(Instant.now(clock));
+        return productRepository.save(product);
+    }
+
+    public Product archive(UUID id) {
+        Product product = findOrThrow(new ProductId(id));
+        product.archive(Instant.now(clock));
+        return productRepository.save(product);
+    }
+
+    public void delete(UUID id) {
+        Product product = findOrThrow(new ProductId(id));
+        product.ensureCanBeDeleted();
+        productRepository.delete(product);
+    }
+
     private Money toMoney(BigDecimal amount, String currencyCode) {
         if (currencyCode == null) {
             throw new DomainValidationException("Currency code must not be null");
@@ -84,6 +124,17 @@ public class ProductService {
             throw new DomainValidationException("Only '" + allowedCurrency + "' allowed currencies are supported");
         }
         return new Money(amount, currency);
+    }
+
+    private ProductStatus toProductStatus(String status) {
+        if  (status == null) {
+            throw new DomainValidationException("Status must not be null");
+        }
+        try {
+            return ProductStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            throw new DomainValidationException("Invalid status '" + status + "'");
+        }
     }
 
     private Product findOrThrow(ProductId id) {

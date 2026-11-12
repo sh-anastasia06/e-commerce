@@ -108,6 +108,12 @@ public class Product {
         }
     }
 
+    public void ensureCanBeEdited() {
+        if (!status.canBeEdited()) {
+            throw new InvalidProductStateException("Product " + id + " is archived and cannot be modified");
+        }
+    }
+
     private static String normalizeDescription(String description) {
         if (description == null) {
             return null;

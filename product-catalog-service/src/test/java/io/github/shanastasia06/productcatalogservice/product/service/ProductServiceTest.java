@@ -1,10 +1,13 @@
 package io.github.shanastasia06.productcatalogservice.product.service;
 
+import io.github.shanastasia06.productcatalogservice.category.domain.CategoryId;
 import io.github.shanastasia06.productcatalogservice.common.domain.PageQuery;
 import io.github.shanastasia06.productcatalogservice.common.domain.PageResult;
+import io.github.shanastasia06.productcatalogservice.common.exception.ConcurrentUpdateException;
 import io.github.shanastasia06.productcatalogservice.common.exception.DomainValidationException;
 import io.github.shanastasia06.productcatalogservice.product.domain.*;
 import io.github.shanastasia06.productcatalogservice.product.exception.CategoryReferenceNotFoundException;
+import io.github.shanastasia06.productcatalogservice.product.exception.InvalidProductStateException;
 import io.github.shanastasia06.productcatalogservice.product.exception.ProductNotFoundException;
 import io.github.shanastasia06.productcatalogservice.product.exception.SkuAlreadyExistsException;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +34,7 @@ class ProductServiceTest {
     private CategoryExistenceChecker categoryExistenceChecker;
     private ProductService productService;
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-09T12:00:00Z"), ZoneOffset.UTC);
+    private static final Instant CREATED_AT_INSTANT = Instant.parse("2026-11-01T10:00:00Z");
 
     private static final UUID VALID_CATEGORY_ID = UUID.randomUUID();
     private static final UUID VALID_PRODUCT_ID = UUID.randomUUID();
@@ -50,7 +54,7 @@ class ProductServiceTest {
 
     @Test
     void create_validCommand_savesAndReturnsProduct() {
-        CreateProductCommand command = new CreateProductCommand(
+        ProductCommand command = new ProductCommand(
                 "SKU-123",
                 "Test Product",
                 "Description",
@@ -81,7 +85,7 @@ class ProductServiceTest {
 
     @Test
     void create_nullAttributes_savesWithEmptyAttributes() {
-        CreateProductCommand command = new CreateProductCommand(
+        ProductCommand command = new ProductCommand(
                 "SKU-123", "Test Product", "Desc", new BigDecimal("10.00"), "USD", VALID_CATEGORY_ID, null
         );
 
@@ -97,7 +101,7 @@ class ProductServiceTest {
 
     @Test
     void create_missingCategory_throwsCategoryNotFound() {
-        CreateProductCommand command = new CreateProductCommand(
+        ProductCommand command = new ProductCommand(
                 "SKU-123", "Test Product", "Desc", new BigDecimal("10.00"), "USD", VALID_CATEGORY_ID, null
         );
 
@@ -113,7 +117,7 @@ class ProductServiceTest {
 
     @Test
     void create_existingSku_throwsSkuAlreadyExists() {
-        CreateProductCommand command = new CreateProductCommand(
+        ProductCommand command = new ProductCommand(
                 "SKU-123", "Test Product", "Desc", new BigDecimal("10.00"), "USD", VALID_CATEGORY_ID, null
         );
 
@@ -129,13 +133,13 @@ class ProductServiceTest {
 
     @Test
     void create_invalidSkuOrBlankName_throwsDomainValidation() {
-        CreateProductCommand invalidSkuCmd = new CreateProductCommand(
+        ProductCommand invalidSkuCmd = new ProductCommand(
                 "", "Test Product", "Desc", new BigDecimal("10.00"), "USD", VALID_CATEGORY_ID, null
         );
         assertThatThrownBy(() -> productService.create(invalidSkuCmd))
                 .isInstanceOf(DomainValidationException.class);
 
-        CreateProductCommand blankNameCmd = new CreateProductCommand(
+        ProductCommand blankNameCmd = new ProductCommand(
                 "SKU-123", "   ", "Desc", new BigDecimal("10.00"), "USD", VALID_CATEGORY_ID, null
         );
         assertThatThrownBy(() -> productService.create(blankNameCmd))
@@ -146,17 +150,17 @@ class ProductServiceTest {
 
     @Test
     void create_unsupportedOrInvalidCurrency_throwsDomainValidation() {
-        CreateProductCommand eurCmd = new CreateProductCommand(
+        ProductCommand eurCmd = new ProductCommand(
                 "SKU-123", "Test", "Desc", new BigDecimal("10.00"), "EUR", VALID_CATEGORY_ID, null
         );
         assertThatThrownBy(() -> productService.create(eurCmd)).isInstanceOf(DomainValidationException.class);
 
-        CreateProductCommand unknownCmd = new CreateProductCommand(
+        ProductCommand unknownCmd = new ProductCommand(
                 "SKU-123", "Test", "Desc", new BigDecimal("10.00"), "XYZ", VALID_CATEGORY_ID, null
         );
         assertThatThrownBy(() -> productService.create(unknownCmd)).isInstanceOf(DomainValidationException.class);
 
-        CreateProductCommand nullCurrCmd = new CreateProductCommand(
+        ProductCommand nullCurrCmd = new ProductCommand(
                 "SKU-123", "Test", "Desc", new BigDecimal("10.00"), null, VALID_CATEGORY_ID, null
         );
         assertThatThrownBy(() -> productService.create(nullCurrCmd)).isInstanceOf(DomainValidationException.class);
@@ -166,7 +170,7 @@ class ProductServiceTest {
 
     @Test
     void create_negativeAmount_throwsDomainValidation() {
-        CreateProductCommand negativeCmd = new CreateProductCommand(
+        ProductCommand negativeCmd = new ProductCommand(
                 "SKU-123", "Test", "Desc", new BigDecimal("-5.00"), "USD", VALID_CATEGORY_ID, null
         );
 
@@ -292,5 +296,566 @@ class ProductServiceTest {
                 .isInstanceOf(DomainValidationException.class);
 
         verifyNoInteractions(productRepository);
+    }
+
+    @Test
+    void update_validCommand_updatesAndReturnsProduct() {
+        Product existingProduct = Product.create(
+                new Sku("OLD-SKU"),
+                new ProductName("Old Name"),
+                "Old Description",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        ProductCommand command = new ProductCommand(
+                "NEW-SKU",
+                "New Name",
+                "New Description",
+                new BigDecimal("150.00"),
+                "USD",
+                VALID_CATEGORY_ID,
+                Map.of("size", "XL")
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(existingProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
+        when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Product updatedProduct = productService.update(VALID_PRODUCT_ID, command);
+
+        ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
+        verify(productRepository).save(captor.capture());
+        Product saved = captor.getValue();
+
+        assertThat(saved.getId()).isEqualTo(existingProduct.getId());
+        assertThat(saved.getStatus()).isEqualTo(existingProduct.getStatus());
+        assertThat(saved.getCreatedAt()).isEqualTo(CREATED_AT_INSTANT);
+        assertThat(saved.getUpdatedAt()).isEqualTo(Instant.parse("2026-11-09T12:00:00Z"));
+        assertThat(saved.getSku().value()).isEqualTo("NEW-SKU");
+        assertThat(saved.getName().value()).isEqualTo("New Name");
+        assertThat(saved.getDescription()).isEqualTo("New Description");
+        assertThat(saved.getPrice().amount()).isEqualByComparingTo("150.00");
+        assertThat(saved.getCategoryId().value()).isEqualTo(VALID_CATEGORY_ID);
+        assertThat(saved.getAttributes().values()).containsEntry("size", "XL");
+    }
+
+    @Test
+    void update_productNotFound_throwsProductNotFoundException() {
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(ProductNotFoundException.class);
+
+        verify(categoryExistenceChecker, never()).exists(any());
+        verify(productRepository, never()).existsBySkuAndIdNot(any(), any());
+    }
+
+    @Test
+    void update_missingCategory_throwsCategoryReferenceNotFoundException() {
+        Product existingProduct = mock(Product.class);
+        when(existingProduct.getId()).thenReturn(new ProductId(VALID_PRODUCT_ID));
+
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(existingProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(false);
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(CategoryReferenceNotFoundException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void update_skuUsedByAnotherProduct_throwsSkuAlreadyExistsException() {
+        Product existingProduct = mock(Product.class);
+        ProductId productId = new ProductId(VALID_PRODUCT_ID);
+        when(existingProduct.getId()).thenReturn(productId);
+
+        ProductCommand command = new ProductCommand(
+                "TAKEN-SKU", "Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(existingProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(Sku.class), eq(productId))).thenReturn(true);
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(SkuAlreadyExistsException.class);
+
+        verify(productRepository, never()).save(any());
+        verify(productRepository).existsBySkuAndIdNot(any(Sku.class), eq(productId));
+    }
+
+    @Test
+    void update_keepingOwnSku_succeeds() {
+        Product existingProduct = Product.create(
+                new Sku("MY-SKU"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        ProductCommand command = new ProductCommand(
+                "MY-SKU", "New Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(existingProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
+        when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Product result = productService.update(VALID_PRODUCT_ID, command);
+
+        assertThat(result).isNotNull();
+        verify(productRepository).save(any());
+    }
+
+    @Test
+    void update_draftProduct_succeeds() {
+        Product draftProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "New Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(draftProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
+        when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Product result = productService.update(VALID_PRODUCT_ID, command);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void update_activeProduct_succeeds() {
+        Product activeProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        activeProduct.activate(Instant.now());
+
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "New Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(activeProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
+        when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Product result = productService.update(VALID_PRODUCT_ID, command);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void update_archivedProduct_throwsInvalidProductStateException() {
+        Product archivedProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        archivedProduct.archive(Instant.now());
+
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "New Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(archivedProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void update_archivedProductWithNonexistentCategory_throwsInvalidProductStateExceptionAndNeverCallsCategoryChecker() {
+        Product archivedProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        archivedProduct.archive(Instant.now());
+
+        UUID nonexistentCategoryId = UUID.randomUUID();
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "New Name", "Desc", new BigDecimal("100.00"), "USD", nonexistentCategoryId, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(archivedProduct));
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(categoryExistenceChecker, never()).exists(any());
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void update_activeProductWithZeroPrice_throwsInvalidProductStateException() {
+        Product activeProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        activeProduct.activate(Instant.now());
+
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "New Name", "Desc", BigDecimal.ZERO, "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(activeProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void update_invalidSkuOrCurrencyEur_throwsDomainValidationExceptionWithoutFindById() {
+        ProductCommand invalidSkuCommand = new ProductCommand(
+                "", "Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, invalidSkuCommand))
+                .isInstanceOf(DomainValidationException.class);
+
+        ProductCommand eurCurrencyCommand = new ProductCommand(
+                "SKU-123", "Name", "Desc", new BigDecimal("100.00"), "EUR", VALID_CATEGORY_ID, null
+        );
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, eurCurrencyCommand))
+                .isInstanceOf(DomainValidationException.class);
+
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void update_concurrentUpdate_propagatesConcurrentUpdateException() {
+        Product existingProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        ProductCommand command = new ProductCommand(
+                "SKU-123", "New Name", "Desc", new BigDecimal("100.00"), "USD", VALID_CATEGORY_ID, null
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(existingProduct));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
+        when(productRepository.save(any())).thenThrow(new ConcurrentUpdateException(existingProduct.getId()));
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(ConcurrentUpdateException.class);
+    }
+
+    @Test
+    void activate_draftWithPositivePrice_becomesActiveAndReturnsSaved() {
+        Product draftProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(draftProduct));
+        when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Product result = productService.activate(VALID_PRODUCT_ID);
+
+        assertThat(result.getUpdatedAt()).isEqualTo(Instant.parse("2026-11-09T12:00:00Z"));
+        assertThat(result).isSameAs(draftProduct);
+        verify(productRepository).save(draftProduct);
+    }
+
+    @Test
+    void activate_notFound_throwsProductNotFoundException() {
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.activate(VALID_PRODUCT_ID))
+                .isInstanceOf(ProductNotFoundException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void activate_zeroPrice_throwsInvalidProductStateException() {
+        Product draftProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(BigDecimal.ZERO, Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(draftProduct));
+
+        assertThatThrownBy(() -> productService.activate(VALID_PRODUCT_ID))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void activate_alreadyActive_throwsInvalidProductStateException() {
+        Product activeProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        activeProduct.activate(Instant.now());
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(activeProduct));
+
+        assertThatThrownBy(() -> productService.activate(VALID_PRODUCT_ID))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void activate_alreadyArchived_throwsInvalidProductStateException() {
+        Product archivedProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        archivedProduct.archive(Instant.now());
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(archivedProduct));
+
+        assertThatThrownBy(() -> productService.activate(VALID_PRODUCT_ID))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void activate_saveConcurrentUpdate_propagatesConcurrentUpdateException() {
+        Product draftProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(draftProduct));
+        when(productRepository.save(any())).thenThrow(new ConcurrentUpdateException(draftProduct.getId()));
+
+        assertThatThrownBy(() -> productService.activate(VALID_PRODUCT_ID))
+                .isInstanceOf(ConcurrentUpdateException.class);
+    }
+
+    @Test
+    void archive_draftProduct_succeeds() {
+        Product draftProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(draftProduct));
+        when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Product result = productService.archive(VALID_PRODUCT_ID);
+
+        assertThat(result).isNotNull();
+        verify(productRepository).save(draftProduct);
+    }
+
+    @Test
+    void archive_activeProduct_succeeds() {
+        Product activeProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        activeProduct.activate(Instant.now());
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(activeProduct));
+        when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Product result = productService.archive(VALID_PRODUCT_ID);
+
+        assertThat(result).isNotNull();
+        verify(productRepository).save(activeProduct);
+    }
+
+    @Test
+    void archive_alreadyArchived_throwsInvalidProductStateException() {
+        Product archivedProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        archivedProduct.archive(Instant.now());
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(archivedProduct));
+
+        assertThatThrownBy(() -> productService.archive(VALID_PRODUCT_ID))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void archive_notFound_throwsProductNotFoundException() {
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.archive(VALID_PRODUCT_ID))
+                .isInstanceOf(ProductNotFoundException.class);
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void delete_draftProduct_deletesById() {
+        Product draftProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(draftProduct));
+
+        productService.delete(VALID_PRODUCT_ID);
+
+        verify(productRepository).delete(draftProduct);
+    }
+
+    @Test
+    void delete_activeProduct_throwsInvalidProductStateException() {
+        Product activeProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        activeProduct.activate(Instant.now());
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(activeProduct));
+
+        assertThatThrownBy(() -> productService.delete(VALID_PRODUCT_ID))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_archivedProduct_throwsInvalidProductStateException() {
+        Product archivedProduct = Product.create(
+                new Sku("SKU-123"),
+                new ProductName("Name"),
+                "Desc",
+                new Money(new BigDecimal("50.00"), Currency.getInstance("USD")),
+                new CategoryId(VALID_CATEGORY_ID),
+                new Attributes(Map.of()),
+                CREATED_AT_INSTANT
+        );
+        archivedProduct.archive(Instant.now());
+
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(archivedProduct));
+
+        assertThatThrownBy(() -> productService.delete(VALID_PRODUCT_ID))
+                .isInstanceOf(InvalidProductStateException.class);
+
+        verify(productRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_notFound_throwsProductNotFoundException() {
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.delete(VALID_PRODUCT_ID))
+                .isInstanceOf(ProductNotFoundException.class);
+
+        verify(productRepository, never()).delete(any());
     }
 }

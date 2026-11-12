@@ -11,5 +11,6 @@ public interface ProductRepository {
     boolean existsBySku(Sku sku);
     boolean existsBySkuAndIdNot(Sku sku, ProductId id);
     void deleteById(ProductId id);
+    void delete(Product product);
     PageResult<Product> search(ProductSearchCriteria criteria, PageQuery pageQuery);
 }

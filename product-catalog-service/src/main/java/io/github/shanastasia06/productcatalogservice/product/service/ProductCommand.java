@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
 
-public record CreateProductCommand(
+public record ProductCommand(
         String sku,
         String name,
         String description,
