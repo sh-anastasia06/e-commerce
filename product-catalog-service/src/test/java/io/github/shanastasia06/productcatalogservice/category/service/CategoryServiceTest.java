@@ -1,6 +1,7 @@
 package io.github.shanastasia06.productcatalogservice.category.service;
 
 import io.github.shanastasia06.productcatalogservice.category.domain.*;
+import io.github.shanastasia06.productcatalogservice.category.exception.CategoryInUseException;
 import io.github.shanastasia06.productcatalogservice.category.exception.CategoryNotFoundException;
 import io.github.shanastasia06.productcatalogservice.category.exception.SlugAlreadyExistsException;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,12 +23,14 @@ import static org.mockito.Mockito.*;
 public class CategoryServiceTest {
     @Mock
     private CategoryRepository categoryRepository;
+    @Mock
+    private CategoryUsageChecker categoryUsageChecker;
 
     private CategoryService categoryService;
 
     @BeforeEach
     void setUp() {
-        categoryService = new CategoryService(categoryRepository);
+        categoryService = new CategoryService(categoryRepository, categoryUsageChecker);
     }
 
     @Test
@@ -157,6 +160,21 @@ public class CategoryServiceTest {
 
         assertThatThrownBy(() -> categoryService.delete(uuid))
                 .isInstanceOf(CategoryNotFoundException.class);
+
+        verify(categoryRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void delete_categoryInUse_throwsException() {
+        UUID uuid = UUID.randomUUID();
+        CategoryId categoryId = new CategoryId(uuid);
+        Category category = Category.create(new CategoryName("Electronics"), new Slug("electronics"), null);
+
+        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
+        when(categoryUsageChecker.isInUse(categoryId)).thenReturn(true);
+
+        assertThatThrownBy(() -> categoryService.delete(uuid))
+                .isInstanceOf(CategoryInUseException.class);
 
         verify(categoryRepository, never()).deleteById(any());
     }

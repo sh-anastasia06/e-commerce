@@ -1,6 +1,7 @@
 package io.github.shanastasia06.productcatalogservice.category.service;
 
 import io.github.shanastasia06.productcatalogservice.category.domain.*;
+import io.github.shanastasia06.productcatalogservice.category.exception.CategoryInUseException;
 import io.github.shanastasia06.productcatalogservice.category.exception.CategoryNotFoundException;
 import io.github.shanastasia06.productcatalogservice.category.exception.SlugAlreadyExistsException;
 import org.springframework.stereotype.Service;
@@ -15,9 +16,11 @@ import java.util.UUID;
 @Service
 public class CategoryService {
     private final CategoryRepository categoryRepository;
+    private final CategoryUsageChecker categoryUsageChecker;
 
-    public CategoryService(CategoryRepository categoryRepository) {
+    public CategoryService(CategoryRepository categoryRepository, CategoryUsageChecker categoryUsageChecker) {
         this.categoryRepository = categoryRepository;
+        this.categoryUsageChecker = categoryUsageChecker;
     }
 
     public Category create(String name, String slug, String description) {
@@ -54,14 +57,13 @@ public class CategoryService {
         return categoryRepository.save(category);
     }
 
-    /*
-     * TODO: delete must refuse when products reference the category (CATEGORY_IN_USE)
-     *  add when product domain will be done
-     */
     public void delete(UUID id) {
         CategoryId categoryId = new CategoryId(id);
         // checks if document exists
         findOrThrow(categoryId);
+        if (categoryUsageChecker.isInUse(categoryId)) {
+            throw new CategoryInUseException(categoryId);
+        }
         categoryRepository.deleteById(categoryId);
     }
 
