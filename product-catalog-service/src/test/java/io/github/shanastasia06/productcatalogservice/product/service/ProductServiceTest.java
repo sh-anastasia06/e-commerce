@@ -595,7 +595,7 @@ class ProductServiceTest {
         when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(existingProduct));
         when(categoryExistenceChecker.exists(any())).thenReturn(true);
         when(productRepository.existsBySkuAndIdNot(any(), any())).thenReturn(false);
-        when(productRepository.save(any())).thenThrow(new ConcurrentUpdateException(existingProduct.getId()));
+        when(productRepository.save(any())).thenThrow(new ConcurrentUpdateException(existingProduct.getId().value()));
 
         assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
                 .isInstanceOf(ConcurrentUpdateException.class);
@@ -708,7 +708,7 @@ class ProductServiceTest {
         );
 
         when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(draftProduct));
-        when(productRepository.save(any())).thenThrow(new ConcurrentUpdateException(draftProduct.getId()));
+        when(productRepository.save(any())).thenThrow(new ConcurrentUpdateException(draftProduct.getId().value()));
 
         assertThatThrownBy(() -> productService.activate(VALID_PRODUCT_ID))
                 .isInstanceOf(ConcurrentUpdateException.class);
