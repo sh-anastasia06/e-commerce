@@ -1,0 +1,53 @@
+### Create a product
+POST http://localhost:8080/api/v1/products
+Content-Type: application/json
+
+{
+  "sku": "HEADPHONES-122",
+  "name": "Wireless headphones",
+  "description": "Wireless headphones with a charger",
+  "price": {
+    "amount": "220.00",
+    "currency": "USD"
+  },
+  "categoryId": "9836f8ab-975e-4512-993e-7974515546dc",
+  "attributes": {
+    "color": "red"
+  }
+}
+
+### Search products
+GET http://localhost:8080/api/v1/products?page=0&size=20
+
+### Search with filters
+GET http://localhost:8080/api/v1/products?minPrice=1&maxPrice=100
+
+### Get by id
+GET http://localhost:8080/api/v1/products/34ae03dd-41e1-48d0-857f-9b3b3210762e
+
+### Update
+PUT http://localhost:8080/api/v1/products/34ae03dd-41e1-48d0-857f-9b3b3210762e
+Content-Type: application/json
+
+{
+  "sku": "HEADPHONES-123",
+  "name": "Wireless headphones",
+  "description": "Wireless headphones with a charger",
+  "price": {
+    "amount": "210.00",
+    "currency": "USD"
+  },
+  "categoryId": "9836f8ab-975e-4512-993e-7974515546dc",
+  "attributes": {
+    "color": "red"
+  }
+}
+
+### Activate
+POST http://localhost:8080/api/v1/products/34ae03dd-41e1-48d0-857f-9b3b3210762e/activate
+
+### Archive
+POST http://localhost:8080/api/v1/products/34ae03dd-41e1-48d0-857f-9b3b3210762e/archive
+
+### Delete (only DRAFT could be deleted)
+DELETE http://localhost:8080/api/v1/products/8ac13b7b-ed87-4050-b9b5-135ed3abb8ee

@@ -126,17 +126,6 @@ public class ProductService {
         return new Money(amount, currency);
     }
 
-    private ProductStatus toProductStatus(String status) {
-        if  (status == null) {
-            throw new DomainValidationException("Status must not be null");
-        }
-        try {
-            return ProductStatus.valueOf(status);
-        } catch (IllegalArgumentException e) {
-            throw new DomainValidationException("Invalid status '" + status + "'");
-        }
-    }
-
     private Product findOrThrow(ProductId id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException(id));

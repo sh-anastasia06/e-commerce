@@ -21,7 +21,7 @@ class ProductExceptionHandler {
 
     @ExceptionHandler(CategoryReferenceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleCategoryReferenceNotFoundException(CategoryReferenceNotFoundException e) {
-        return ErrorResponses.build(HttpStatus.NOT_FOUND, ErrorCode.CATEGORY_NOT_FOUND, e.getMessage(), null);
+        return ErrorResponses.build(HttpStatus.UNPROCESSABLE_CONTENT, ErrorCode.CATEGORY_NOT_FOUND, e.getMessage(), null);
     }
 
     @ExceptionHandler(SkuAlreadyExistsException.class)
@@ -31,6 +31,6 @@ class ProductExceptionHandler {
 
     @ExceptionHandler(InvalidProductStateException.class)
     public ResponseEntity<ErrorResponse> handleInvalidProductStateException(InvalidProductStateException e) {
-        return ErrorResponses.build(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_PRODUCT_STATE, e.getMessage(), null);
+        return ErrorResponses.build(HttpStatus.CONFLICT, ErrorCode.INVALID_PRODUCT_STATE, e.getMessage(), null);
     }
 }

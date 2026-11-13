@@ -104,7 +104,7 @@ public class Product {
     public void ensureCanBeDeleted() {
         if (!status.canBeDeleted()) {
             throw new InvalidProductStateException(
-                    "Product " + id + " cannot be deleted from status " + status + ", archive it instead");
+                    "Product " + id + " cannot be deleted from status " + status);
         }
     }
 
