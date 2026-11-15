@@ -1,8 +1,7 @@
-package io.github.shanastasia06.productcatalogservice.category.infrastructure;
+package io.github.shanastasia06.productcatalogservice.product.infrastructure;
 
 import io.github.shanastasia06.productcatalogservice.category.domain.CategoryId;
 import io.github.shanastasia06.productcatalogservice.category.service.CategoryUsageChecker;
-import io.github.shanastasia06.productcatalogservice.product.infrastructure.SpringDataProductRepository;
 import org.springframework.stereotype.Component;
 
 @Component

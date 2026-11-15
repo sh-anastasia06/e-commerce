@@ -37,7 +37,7 @@ class MongoProductRepository implements ProductRepository {
         } catch (DuplicateKeyException e) {
             throw new SkuAlreadyExistsException(product.getSku());
         } catch (OptimisticLockingFailureException e) {
-            throw new ConcurrentUpdateException(product.getId());
+            throw new ConcurrentUpdateException(product.getId().value());
         }
     }
 
@@ -67,7 +67,7 @@ class MongoProductRepository implements ProductRepository {
         try {
             springDataRepository.delete(mapper.toDocument(product));
         } catch (OptimisticLockingFailureException e) {
-            throw new ConcurrentUpdateException(product.getId());
+            throw new ConcurrentUpdateException(product.getId().value());
         }
     }
 

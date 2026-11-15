@@ -2,7 +2,12 @@ openapi: 3.1.0
 info:
   title: Product Catalog Service
   version: 1.0.0
-  description: Product and category management for the e-commerce platform.
+  description: |
+    - Product and category management for the e-commerce platform.
+    - An ACTIVE product always has a price greater than zero.
+    - Concurrent changes to the same product are detected with optimistic locking; 
+        the losing request gets 409 CONCURRENT_MODIFICATION and the client should reload and retry.
+    - Only USD prices are accepted.
 
 servers:
   - url: http://localhost:8080/api/v1
@@ -259,9 +264,10 @@ paths:
           $ref: '#/components/responses/ProductNotFound'
         '409':
           description: >
-            SKU already exists (SKU_ALREADY_EXISTS), the product is ARCHIVED and cannot be modified
-              (INVALID_PRODUCT_STATE), or the product is ACTIVE and the new price is zero
-              (INVALID_PRODUCT_STATE)
+            SKU already exists (SKU_ALREADY_EXISTS); the product is ARCHIVED and cannot be modified
+                (INVALID_PRODUCT_STATE); the product is ACTIVE and the new price is zero
+                (INVALID_PRODUCT_STATE); or the product was changed by someone else after it was loaded
+                (CONCURRENT_MODIFICATION)
           content:
             application/json:
               schema:
@@ -283,7 +289,9 @@ paths:
         '404':
           $ref: '#/components/responses/ProductNotFound'
         '409':
-          description: Product is not in DRAFT status, archive it instead (INVALID_PRODUCT_STATE)
+          description: >
+            Product is not in DRAFT status, archive it instead (INVALID_PRODUCT_STATE);
+              or the product was changed by someone else after it was loaded (CONCURRENT_MODIFICATION)
           content:
             application/json:
               schema:
@@ -309,7 +317,9 @@ paths:
         '404':
           $ref: '#/components/responses/ProductNotFound'
         '409':
-          description: Product is not in DRAFT status or its price is zero (INVALID_PRODUCT_STATE)
+          description: >
+            Product is not in DRAFT status or its price is zero (INVALID_PRODUCT_STATE); 
+              or the product was changed by someone else after it was loaded (CONCURRENT_MODIFICATION)
           content:
             application/json:
               schema:
@@ -334,7 +344,9 @@ paths:
         '404':
           $ref: '#/components/responses/ProductNotFound'
         '409':
-          description: Product is already ARCHIVED (INVALID_PRODUCT_STATE)
+          description: >
+            Product is already ARCHIVED (INVALID_PRODUCT_STATE); 
+              or the product was changed by someone else after it was loaded (CONCURRENT_MODIFICATION)
           content:
             application/json:
               schema:
@@ -371,7 +383,7 @@ components:
 
   responses:
     BadRequest:
-      description: Validation error, malformed id or invalid parameters (VALIDATION_ERROR)
+      description: Validation error, malformed JSON body, malformed id or invalid parameters (VALIDATION_ERROR)
       content:
         application/json:
           schema:
@@ -419,12 +431,17 @@ components:
           example: "799.99"
         currency:
           type: string
-          description: ISO 4217 currency code
+          description: ISO 4217 currency code. Currently only USD is accepted; other codes return 400.
           pattern: '^[A-Z]{3}$'
           example: "USD"
 
     Attributes:
       type: object
+      description: >
+        Free-form product attributes (for example ramGb, color). Keys are 1 to 50 characters, must not
+        contain a dot and must not start with $. Values are strings (at most 200 characters), booleans,
+        or numbers (integers or floating-point). Nested objects and arrays are not allowed.
+        Responses return an empty object when a product has no attributes.
       maxProperties: 50
       propertyNames:
           minLength: 1
@@ -582,6 +599,7 @@ components:
             - SLUG_ALREADY_EXISTS
             - INVALID_PRODUCT_STATE
             - CATEGORY_IN_USE
+            - CONCURRENT_MODIFICATION
           example: "PRODUCT_NOT_FOUND"
         message:
           type: string
