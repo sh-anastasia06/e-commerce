@@ -3,6 +3,9 @@ server:
 
 catalog:
   currency: USD
+  cache:
+    product-ttl: 10m
+    ttl-jitter: 0.2
 
 spring:
   application:
@@ -18,6 +21,13 @@ spring:
       auto-index-creation: true
       representation:
         big-decimal: decimal128
+
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+      connect-timeout: 500ms
+      password: ${REDIS_PASSWORD}
 
 management:
   endpoints:

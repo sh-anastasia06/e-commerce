@@ -20,13 +20,15 @@ import java.util.UUID;
 @Service
 public class ProductService {
     private final ProductRepository productRepository;
+    private final ProductCache cache;
     private final CategoryExistenceChecker categoryExistenceChecker;
     private final Clock clock;
     private final Currency allowedCurrency;
 
-    public ProductService(ProductRepository productRepository, CategoryExistenceChecker categoryExistenceChecker,
+    public ProductService(ProductRepository productRepository, ProductCache cache, CategoryExistenceChecker categoryExistenceChecker,
                           Clock clock, @Value("${catalog.currency}") Currency allowedCurrency) {
         this.productRepository = productRepository;
+        this.cache = cache;
         this.categoryExistenceChecker = categoryExistenceChecker;
         this.clock = clock;
         this.allowedCurrency = allowedCurrency;
@@ -52,8 +54,13 @@ public class ProductService {
         return productRepository.save(product);
     }
 
-    public Product getById(UUID id) {
-        return findOrThrow(new ProductId(id));
+    public Product getById(UUID uuid) {
+        ProductId id = new ProductId(uuid);
+        return cache.get(id).orElseGet(() -> {
+            Product product = findOrThrow(id);
+            cache.put(product);
+            return product;
+        });
     }
 
     public PageResult<Product> search(ProductSearchQuery query) {
@@ -88,25 +95,33 @@ public class ProductService {
         }
 
         product.update(sku, name, description, price, categoryId, attributes, Instant.now(clock));
-        return productRepository.save(product);
+        Product updated = productRepository.save(product);
+        cache.evict(updated.getId());
+        return updated;
     }
 
     public Product activate(UUID id) {
         Product product = findOrThrow(new ProductId(id));
         product.activate(Instant.now(clock));
-        return productRepository.save(product);
+        Product activated = productRepository.save(product);
+        cache.evict(activated.getId());
+        return activated;
     }
 
     public Product archive(UUID id) {
         Product product = findOrThrow(new ProductId(id));
         product.archive(Instant.now(clock));
-        return productRepository.save(product);
+        Product archived = productRepository.save(product);
+        cache.evict(archived.getId());
+        return archived;
     }
 
     public void delete(UUID id) {
-        Product product = findOrThrow(new ProductId(id));
+        ProductId productId = new ProductId(id);
+        Product product = findOrThrow(productId);
         product.ensureCanBeDeleted();
         productRepository.delete(product);
+        cache.evict(productId);
     }
 
     private Money toMoney(BigDecimal amount, String currencyCode) {
