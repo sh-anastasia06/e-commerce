@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.*;
 
 class ProductServiceTest {
     private ProductRepository productRepository;
+    private ProductCache cache;
     private CategoryExistenceChecker categoryExistenceChecker;
     private ProductService productService;
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-09T12:00:00Z"), ZoneOffset.UTC);
@@ -43,8 +45,10 @@ class ProductServiceTest {
     void setUp() {
         productRepository = mock(ProductRepository.class);
         categoryExistenceChecker = mock(CategoryExistenceChecker.class);
+        cache = mock(ProductCache.class);
         productService = new ProductService(
                 productRepository,
+                cache,
                 categoryExistenceChecker,
                 clock,
                 Currency.getInstance("USD")
@@ -195,6 +199,31 @@ class ProductServiceTest {
 
         assertThatThrownBy(() -> productService.getById(VALID_PRODUCT_ID))
                 .isInstanceOf(ProductNotFoundException.class);
+    }
+
+    @Test
+    void getById_cacheMiss_loadsFromRepositoryAndPopulatesCache() {
+        Product mockProduct = mock(Product.class);
+        when(productRepository.findById(any(ProductId.class))).thenReturn(Optional.of(mockProduct));
+
+        Product result = productService.getById(VALID_PRODUCT_ID);
+
+        assertThat(result).isSameAs(mockProduct);
+        verify(productRepository).findById(argThat(id -> id.value().equals(VALID_PRODUCT_ID)));
+        verify(cache).put(mockProduct);
+    }
+
+    @Test
+    void getById_cacheHit_returnsCachedProductWithoutQueryingRepository() {
+        Product cachedProduct = mock(Product.class);
+        when(cache.get(argThat(id -> id.value().equals(VALID_PRODUCT_ID))))
+                .thenReturn(Optional.of(cachedProduct));
+
+        Product result = productService.getById(VALID_PRODUCT_ID);
+
+        assertThat(result).isSameAs(cachedProduct);
+        verifyNoInteractions(productRepository);
+        verify(cache, never()).put(any());
     }
 
     @Test
@@ -602,6 +631,62 @@ class ProductServiceTest {
     }
 
     @Test
+    void update_validCommand_savesBeforeEvictingAndNeverReadsCache() {
+        ProductId productId = new ProductId(VALID_PRODUCT_ID);
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(productId);
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), eq(productId))).thenReturn(false);
+        when(productRepository.save(product)).thenReturn(product);
+
+        ProductCommand command = new ProductCommand(
+                "SKU-456",
+                "Updated Product",
+                "Updated description",
+                new BigDecimal("149.99"),
+                "USD",
+                VALID_CATEGORY_ID,
+                Map.of("color", "blue")
+        );
+
+        Product result = productService.update(VALID_PRODUCT_ID, command);
+
+        assertThat(result).isSameAs(product);
+        InOrder inOrder = inOrder(productRepository, cache);
+        inOrder.verify(productRepository).save(product);
+        inOrder.verify(cache).evict(productId);
+        verify(cache, never()).get(any());
+    }
+
+    @Test
+    void update_whenSaveThrows_doesNotEvictCache() {
+        ProductId productId = new ProductId(VALID_PRODUCT_ID);
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(productId);
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(categoryExistenceChecker.exists(any())).thenReturn(true);
+        when(productRepository.existsBySkuAndIdNot(any(), eq(productId))).thenReturn(false);
+        when(productRepository.save(product)).thenThrow(new RuntimeException("DB write failed"));
+
+        ProductCommand command = new ProductCommand(
+                "SKU-456",
+                "Updated Product",
+                "Updated description",
+                new BigDecimal("149.99"),
+                "USD",
+                VALID_CATEGORY_ID,
+                Map.of()
+        );
+
+        assertThatThrownBy(() -> productService.update(VALID_PRODUCT_ID, command))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(cache, never()).evict(any());
+        verify(cache, never()).get(any());
+    }
+
+    @Test
     void activate_draftWithPositivePrice_becomesActiveAndReturnsSaved() {
         Product draftProduct = Product.create(
                 new Sku("SKU-123"),
@@ -715,6 +800,22 @@ class ProductServiceTest {
     }
 
     @Test
+    void activate_existingProduct_savesBeforeEvictingCache() {
+        ProductId productId = new ProductId(VALID_PRODUCT_ID);
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(productId);
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productRepository.save(product)).thenReturn(product);
+
+        Product result = productService.activate(VALID_PRODUCT_ID);
+
+        assertThat(result).isSameAs(product);
+        InOrder inOrder = inOrder(productRepository, cache);
+        inOrder.verify(productRepository).save(product);
+        inOrder.verify(cache).evict(productId);
+    }
+
+    @Test
     void archive_draftProduct_succeeds() {
         Product draftProduct = Product.create(
                 new Sku("SKU-123"),
@@ -789,6 +890,22 @@ class ProductServiceTest {
     }
 
     @Test
+    void archive_existingProduct_savesBeforeEvictingCache() {
+        ProductId productId = new ProductId(VALID_PRODUCT_ID);
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(productId);
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productRepository.save(product)).thenReturn(product);
+
+        Product result = productService.archive(VALID_PRODUCT_ID);
+
+        assertThat(result).isSameAs(product);
+        InOrder inOrder = inOrder(productRepository, cache);
+        inOrder.verify(productRepository).save(product);
+        inOrder.verify(cache).evict(productId);
+    }
+
+    @Test
     void delete_draftProduct_deletesById() {
         Product draftProduct = Product.create(
                 new Sku("SKU-123"),
@@ -857,5 +974,18 @@ class ProductServiceTest {
                 .isInstanceOf(ProductNotFoundException.class);
 
         verify(productRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_existingProduct_deletesBeforeEvictingCache() {
+        ProductId productId = new ProductId(VALID_PRODUCT_ID);
+        Product product = mock(Product.class);
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        productService.delete(VALID_PRODUCT_ID);
+
+        InOrder inOrder = inOrder(productRepository, cache);
+        inOrder.verify(productRepository).delete(product);
+        inOrder.verify(cache).evict(productId);
     }
 }

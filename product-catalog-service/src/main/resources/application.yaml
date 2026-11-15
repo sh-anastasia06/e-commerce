@@ -3,6 +3,9 @@ server:
 
 catalog:
   currency: USD
+  cache:
+    product-ttl: 10m
+    ttl-jitter: 0.2
 
 spring:
   application:
