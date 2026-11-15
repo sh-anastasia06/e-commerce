@@ -19,6 +19,13 @@ spring:
       representation:
         big-decimal: decimal128
 
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+      connect-timeout: 500ms
+      password: ${REDIS_PASSWORD}
+
 management:
   endpoints:
     web:
